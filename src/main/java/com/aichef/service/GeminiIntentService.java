@@ -30,23 +30,35 @@ public class GeminiIntentService {
     private final ObjectMapper objectMapper;
 
     public Optional<MessageIntent> detectIntent(String text, ZoneId zoneId) {
-        if (!aiProperties.hasGeminiKey() || text == null || text.isBlank()) {
+        if (text == null || text.isBlank()) {
             return Optional.empty();
         }
 
+        String prompt = buildIntentPrompt(text, zoneId);
+        if (aiProperties.hasOllama()) {
+            Optional<MessageIntent> ollamaIntent = detectWithOllama(prompt, zoneId);
+            if (ollamaIntent.isPresent()) {
+                return ollamaIntent;
+            }
+        }
+        if (aiProperties.hasGeminiKey()) {
+            return detectWithGemini(prompt, zoneId);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<MessageIntent> detectWithGemini(String prompt, ZoneId zoneId) {
         try {
             RestClient geminiClient = RestClient.builder()
-                    .baseUrl(resolveBaseUrl())
+                    .baseUrl(resolveGeminiBaseUrl())
                     .build();
-
-            String prompt = buildIntentPrompt(text, zoneId);
             Map<String, Object> payload = buildTextPayload(prompt);
 
             Map<?, ?> response = geminiClient.post()
                     .uri(uri -> uri
                             .path("/v1beta/models/{model}:generateContent")
                             .queryParam("key", aiProperties.geminiApiKey())
-                            .build(resolveModel()))
+                            .build(resolveGeminiModel()))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .retrieve()
@@ -58,9 +70,38 @@ public class GeminiIntentService {
             }
 
             JsonNode root = objectMapper.readTree(stripJsonFence(raw));
-            return Optional.of(toIntent(root, zoneId));
+            MessageIntent intent = toIntent(root, zoneId);
+            log.info("Intent parsed by Gemini. action={}, classification={}", intent.action(), intent.classification());
+            return Optional.of(intent);
         } catch (Exception e) {
             log.warn("Gemini intent detection failed: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Optional<MessageIntent> detectWithOllama(String prompt, ZoneId zoneId) {
+        try {
+            RestClient ollamaClient = RestClient.builder()
+                    .baseUrl(resolveOllamaBaseUrl())
+                    .build();
+            Map<String, Object> payload = buildOllamaPayload(prompt);
+            Map<?, ?> response = ollamaClient.post()
+                    .uri("/api/generate")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(Map.class);
+
+            String raw = extractOllamaTextResponse(response);
+            if (raw == null || raw.isBlank()) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(stripJsonFence(raw));
+            MessageIntent intent = toIntent(root, zoneId);
+            log.info("Intent parsed by Ollama. action={}, classification={}", intent.action(), intent.classification());
+            return Optional.of(intent);
+        } catch (Exception e) {
+            log.warn("Ollama intent detection failed: {}", e.getMessage());
             return Optional.empty();
         }
     }
@@ -123,6 +164,18 @@ public class GeminiIntentService {
         return Map.of("contents", List.of(partsContainer), "generationConfig", genConfig);
     }
 
+    private Map<String, Object> buildOllamaPayload(String prompt) {
+        Map<String, Object> options = new HashMap<>();
+        options.put("temperature", 0.1);
+        return Map.of(
+                "model", resolveOllamaModel(),
+                "prompt", prompt,
+                "stream", false,
+                "format", "json",
+                "options", options
+        );
+    }
+
     @SuppressWarnings("unchecked")
     private String extractTextResponse(Map<?, ?> response) {
         if (response == null) {
@@ -160,6 +213,17 @@ public class GeminiIntentService {
             out = out.replaceFirst("```$", "").trim();
         }
         return out;
+    }
+
+    private String extractOllamaTextResponse(Map<?, ?> response) {
+        if (response == null) {
+            return null;
+        }
+        Object value = response.get("response");
+        if (value instanceof String text) {
+            return text;
+        }
+        return null;
     }
 
     private BotAction parseAction(String raw) {
@@ -222,17 +286,31 @@ public class GeminiIntentService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private String resolveBaseUrl() {
+    private String resolveGeminiBaseUrl() {
         if (aiProperties.geminiBaseUrl() == null || aiProperties.geminiBaseUrl().isBlank()) {
             return "https://generativelanguage.googleapis.com";
         }
         return aiProperties.geminiBaseUrl();
     }
 
-    private String resolveModel() {
+    private String resolveGeminiModel() {
         if (aiProperties.geminiModel() == null || aiProperties.geminiModel().isBlank()) {
             return "gemini-2.0-flash";
         }
         return aiProperties.geminiModel();
+    }
+
+    private String resolveOllamaBaseUrl() {
+        if (aiProperties.ollamaBaseUrl() == null || aiProperties.ollamaBaseUrl().isBlank()) {
+            return "http://localhost:11434";
+        }
+        return aiProperties.ollamaBaseUrl();
+    }
+
+    private String resolveOllamaModel() {
+        if (aiProperties.ollamaModel() == null || aiProperties.ollamaModel().isBlank()) {
+            return "qwen2.5:3b-instruct";
+        }
+        return aiProperties.ollamaModel();
     }
 }

@@ -47,7 +47,10 @@ app:
     ollama-base-url: ${APP_OLLAMA_BASE_URL:}
     ollama-model: ${APP_OLLAMA_MODEL:}
     whisper-command: ${APP_WHISPER_COMMAND:}
-    whisper-model: ${APP_WHISPER_MODEL:tiny}
+    whisper-model: ${APP_WHISPER_MODEL:small}
+    whisper-fallback-model: ${APP_WHISPER_FALLBACK_MODEL:medium}
+    vosk-python: ${APP_VOSK_PYTHON:.venv/bin/python}
+    vosk-model-path: ${APP_VOSK_MODEL_PATH:}
   google:
     calendar:
       enabled: ${GOOGLE_CALENDAR_ENABLED:false}

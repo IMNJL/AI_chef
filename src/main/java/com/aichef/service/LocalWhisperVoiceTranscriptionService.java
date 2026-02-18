@@ -25,6 +25,8 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
 
     private static final long DOWNLOAD_ERROR_COOLDOWN_SEC = 30 * 60;
     private static final long WHISPER_TIMEOUT_SEC = 30 * 60;
+    private static final int MIN_REASONABLE_TEXT_LENGTH = 12;
+    private static final int MIN_LETTER_COUNT = 6;
 
     private final RestClient telegramRestClient;
     private final TelegramProperties telegramProperties;
@@ -39,24 +41,53 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
 
         String filePath = resolveTelegramFilePath(fileId);
         byte[] voiceBytes = downloadTelegramFile(filePath);
-        String transcribedText = transcribeWithWhisperCli(voiceBytes);
+        String primaryModel = resolvePrimaryModel();
+        String fallbackModel = normalizeModelValue(aiProperties.whisperFallbackModel());
+        String transcribedText = transcribeWithWhisperTwoStage(voiceBytes, primaryModel, fallbackModel, fileId);
+        log.info("Voice transcribed by local Whisper. fileId={}, mimeType={}, textLength={}, text={}",
+                fileId, mimeType, transcribedText.length(), compactForLog(transcribedText));
         String telegramFileUrl = telegramProperties.apiBase() + "/file/bot" + telegramProperties.botToken() + "/" + filePath;
 
         return new VoiceTranscriptionResult(transcribedText, telegramFileUrl, mimeType, durationSec);
     }
 
-    private String transcribeWithWhisperCli(byte[] audioBytes) {
+    private String transcribeWithWhisperTwoStage(byte[] audioBytes, String primaryModel, String fallbackModel, String fileId) {
+        String firstPass;
+        try {
+            firstPass = transcribeWithWhisperCli(audioBytes, primaryModel);
+        } catch (Exception firstError) {
+            if (canUseFallbackModel(primaryModel, fallbackModel)) {
+                log.warn("Whisper fast pass failed on model={}, retrying with fallback model={}. fileId={}, error={}",
+                        primaryModel, fallbackModel, fileId, firstError.getMessage());
+                return transcribeWithWhisperCli(audioBytes, fallbackModel);
+            }
+            throw firstError;
+        }
+
+        if (!shouldRetryWithFallback(firstPass) || !canUseFallbackModel(primaryModel, fallbackModel)) {
+            return firstPass;
+        }
+
+        log.info("Whisper fallback triggered due to low-quality first pass. fileId={}, primaryModel={}, fallbackModel={}, firstPassText={}",
+                fileId, primaryModel, fallbackModel, compactForLog(firstPass));
+        try {
+            return transcribeWithWhisperCli(audioBytes, fallbackModel);
+        } catch (Exception fallbackError) {
+            log.warn("Whisper fallback failed, using first pass result. fileId={}, fallbackModel={}, error={}",
+                    fileId, fallbackModel, fallbackError.getMessage());
+            return firstPass;
+        }
+    }
+
+    private String transcribeWithWhisperCli(byte[] audioBytes, String model) {
         long nowEpochSec = System.currentTimeMillis() / 1000;
         if (nowEpochSec < blockedUntilEpochSec) {
             long waitSec = blockedUntilEpochSec - nowEpochSec;
             throw new IllegalStateException("Whisper model download is temporarily blocked after repeated checksum failures. "
-                    + "Retry in ~" + waitSec + "s or provide local model file via APP_WHISPER_MODEL=/absolute/path/to/tiny.pt");
+                    + "Retry in ~" + waitSec + "s or provide local model file via APP_WHISPER_MODEL=/absolute/path/to/model.pt");
         }
 
         Path workDir = null;
-        String model = (aiProperties.whisperModel() == null || aiProperties.whisperModel().isBlank())
-                ? "tiny"
-                : aiProperties.whisperModel();
         Path modelCachePath = resolveModelCachePath(model);
         try {
             workDir = Files.createTempDirectory("whisper-stt-");
@@ -106,7 +137,7 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
             }
             return text;
         } catch (Exception e) {
-            throw new IllegalStateException("Local Whisper transcription failed: " + e.getMessage(), e);
+            throw new IllegalStateException("Local Whisper transcription failed for model '" + model + "': " + e.getMessage(), e);
         } finally {
             if (workDir != null) {
                 try {
@@ -122,6 +153,44 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
                 }
             }
         }
+    }
+
+    private String resolvePrimaryModel() {
+        String configured = normalizeModelValue(aiProperties.whisperModel());
+        return configured == null ? "small" : configured;
+    }
+
+    private String normalizeModelValue(String model) {
+        if (model == null || model.isBlank()) {
+            return null;
+        }
+        return model.trim();
+    }
+
+    private boolean canUseFallbackModel(String primaryModel, String fallbackModel) {
+        return fallbackModel != null && !fallbackModel.equals(primaryModel);
+    }
+
+    private boolean shouldRetryWithFallback(String text) {
+        if (text == null) {
+            return true;
+        }
+        String compact = text.replaceAll("\\s+", " ").trim();
+        if (compact.isBlank()) {
+            return true;
+        }
+        if (compact.length() < MIN_REASONABLE_TEXT_LENGTH) {
+            return true;
+        }
+
+        long letters = compact.chars().filter(Character::isLetter).count();
+        if (letters < MIN_LETTER_COUNT) {
+            return true;
+        }
+
+        long spaces = compact.chars().filter(ch -> ch == ' ').count();
+        long words = spaces + 1;
+        return words <= 2 && compact.length() <= 16;
     }
 
     private CommandResult runWhisper(String cmd, Path workDir, String model, Path modelCachePath) throws IOException, InterruptedException {
@@ -231,6 +300,18 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
             log.debug("Whisper {}. model={}, cacheFile={}, size={} MB",
                     phase, model, modelCachePath, String.format(Locale.ROOT, "%.2f", size / (1024.0 * 1024.0)));
         }
+    }
+
+    private String compactForLog(String text) {
+        if (text == null) {
+            return "";
+        }
+        String compact = text.replace("\r", " ").replace("\n", " ").replaceAll("\\s+", " ").trim();
+        int limit = 500;
+        if (compact.length() <= limit) {
+            return compact;
+        }
+        return compact.substring(0, limit) + "...";
     }
 
     private String resolveTelegramFilePath(String fileId) {

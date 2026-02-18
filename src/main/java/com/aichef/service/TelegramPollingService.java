@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -15,6 +16,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -29,10 +31,15 @@ public class TelegramPollingService {
 
     private final AtomicLong offset = new AtomicLong(0);
     private final AtomicBoolean pollingConflictLogged = new AtomicBoolean(false);
+    private final AtomicInteger networkErrorStreak = new AtomicInteger(0);
+    private final AtomicLong nextPollAllowedAtMs = new AtomicLong(0);
 
     @Scheduled(fixedDelayString = "${app.telegram.poll-interval-ms:3000}")
     public void pollUpdates() {
         if (isWebhookModeEnabled(properties.publicBaseUrl())) {
+            return;
+        }
+        if (System.currentTimeMillis() < nextPollAllowedAtMs.get()) {
             return;
         }
 
@@ -42,6 +49,7 @@ public class TelegramPollingService {
                     .retrieve()
                     .body(Map.class);
 
+            resetNetworkBackoffIfNeeded();
             if (response == null || !Boolean.TRUE.equals(response.get("ok"))) {
                 log.warn("Telegram getUpdates returned unexpected response={}", response);
                 return;
@@ -70,9 +78,55 @@ public class TelegramPollingService {
                 return;
             }
             log.error("Failed to poll getUpdates. error={}", e.getMessage(), e);
+        } catch (ResourceAccessException e) {
+            applyNetworkBackoff(e);
         } catch (RestClientException e) {
             log.error("Failed to poll getUpdates. error={}", e.getMessage(), e);
         }
+    }
+
+    private void applyNetworkBackoff(ResourceAccessException e) {
+        int streak = networkErrorStreak.incrementAndGet();
+        long backoffMs = calculateBackoffMs(streak);
+        nextPollAllowedAtMs.set(System.currentTimeMillis() + backoffMs);
+        Throwable root = rootCause(e);
+        log.warn("Telegram getUpdates network error: {}. Retry in {} ms (attempt #{})",
+                summarizeCause(root), backoffMs, streak);
+        if (log.isDebugEnabled()) {
+            log.debug("Telegram polling network error stack trace", e);
+        }
+    }
+
+    private void resetNetworkBackoffIfNeeded() {
+        int streak = networkErrorStreak.getAndSet(0);
+        nextPollAllowedAtMs.set(0);
+        if (streak > 0) {
+            log.info("Telegram polling connection restored after {} consecutive network errors", streak);
+        }
+    }
+
+    private long calculateBackoffMs(int streak) {
+        int exponent = Math.min(6, Math.max(0, streak - 1));
+        return Math.min(60_000L, 1_000L * (1L << exponent));
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private String summarizeCause(Throwable cause) {
+        if (cause == null) {
+            return "unknown";
+        }
+        String message = cause.getMessage();
+        if (message == null || message.isBlank()) {
+            return cause.getClass().getSimpleName();
+        }
+        return cause.getClass().getSimpleName() + ": " + message;
     }
 
     private boolean isWebhookModeEnabled(String baseUrl) {

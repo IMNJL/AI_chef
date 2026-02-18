@@ -58,6 +58,8 @@ public class TelegramBotService {
     private static final Pattern DURATION_MIN_PATTERN = Pattern.compile("\\b(\\d{1,3})\\s*мин(?:ут[аы]?)?\\b");
     private static final Pattern DURATION_HOUR_DECIMAL_PATTERN = Pattern.compile("\\b(\\d+)[,.](\\d)\\s*час");
     private static final Pattern DURATION_HOUR_PATTERN = Pattern.compile("\\b(\\d{1,2})\\s*час(?:а|ов)?\\b");
+    private static final Pattern EVENT_WIZARD_TRIGGER_PATTERN = Pattern.compile(
+            "\\b(созда(ть|й)|добав(ить|ь)|запланиру(й|йте|ю)|сдела(й|ть))\\s+(событи[еяю]|встреч[ауеи])\\b");
     private static final Map<String, Integer> RUS_MONTHS = Map.ofEntries(
             Map.entry("январ", 1),
             Map.entry("феврал", 2),
@@ -126,11 +128,13 @@ public class TelegramBotService {
                 TelegramWebhookUpdate.Voice voice = update.message().voice();
                 VoiceTranscriptionResult transcriptionResult = voiceTranscriptionService.transcribe(
                         voice.file_id(), voice.mime_type(), voice.duration());
-                rawText = transcriptionResult.text();
+                String transcriptionRaw = transcriptionResult.text();
+                rawText = sanitizeRecognizedText(transcriptionRaw);
                 fileUrl = transcriptionResult.telegramFileUrl();
                 metadata.put("voice_duration_sec", transcriptionResult.durationSec());
                 metadata.put("voice_mime_type", transcriptionResult.mimeType());
                 metadata.put("voice_file_id", voice.file_id());
+                metadata.put("transcription_raw", transcriptionRaw);
                 metadata.put("transcription", rawText);
             } catch (Exception e) {
                 log.error("Voice transcription failed. chatId={}, error={}", chatId, e.getMessage(), e);
@@ -269,8 +273,7 @@ public class TelegramBotService {
                 "resize_keyboard", true,
                 "keyboard", List.of(
                         List.of(Map.of("text", "📅 Сегодня"), Map.of("text", "🗓 Завтра"), Map.of("text", "📆 Неделя")),
-                        List.of(Map.of("text", "📝 Заметки"), Map.of("text", "✏️ Редактировать заметку")),
-                        List.of(Map.of("text", "🔗 Подключить Google"))
+                List.of(Map.of("text", "📝 Заметки"), Map.of("text", "✏️ Редактировать заметку"))
                 )
         );
     }
@@ -473,7 +476,331 @@ public class TelegramBotService {
     private String buildWelcomeMessage(Long chatId) {
         return "AI Chief of Staff включен.\n"
                 + "Отправьте текст или голос, и я сам определю: задача, встреча или запрос расписания.\n"
-                + "Кнопки оставил только для просмотра и редактирования: Сегодня, Завтра, Неделя, Заметки.";
+                + "Кнопки — только для просмотра и редактирования: Сегодня, Завтра, Неделя, Заметки.";
+    }
+
+    private InboundItem saveInboundItem(
+            User user,
+            SourceType sourceType,
+            String rawText,
+            String fileUrl,
+            Map<String, Object> metadata,
+            FilterClassification classification,
+            InboundStatus status
+    ) {
+        InboundItem item = new InboundItem();
+        item.setUser(user);
+        item.setSourceType(sourceType);
+        item.setRawText(rawText);
+        item.setFileUrl(fileUrl);
+        item.setMetadata(metadata == null ? new HashMap<>() : new HashMap<>(metadata));
+        item.setFilterClassification(classification);
+        item.setProcessingStatus(status == null ? InboundStatus.RECEIVED : status);
+        return inboundItemRepository.save(item);
+    }
+
+    private boolean isCancelRequest(String text) {
+        if (text == null) {
+            return false;
+        }
+        if (text.contains("❌")) {
+            return true;
+        }
+        String normalized = normalizeCommandText(text);
+        return normalized.equals("/cancel")
+                || normalized.equals("отмена")
+                || normalized.contains("отменить")
+                || normalized.contains("cancel");
+    }
+
+    private boolean shouldStartEventWizard(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = normalizeCommandText(text);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        return normalized.equals("создать событие")
+                || normalized.equals("создай событие")
+                || normalized.equals("добавить событие")
+                || normalized.equals("добавь событие")
+                || normalized.equals("новое событие")
+                || normalized.equals("создать встречу")
+                || normalized.equals("создай встречу")
+                || normalized.startsWith("создать событие ")
+                || normalized.startsWith("создай событие ")
+                || normalized.startsWith("добавить событие ")
+                || normalized.startsWith("добавь событие ")
+                || normalized.startsWith("создать встречу ")
+                || normalized.startsWith("создай встречу ")
+                || EVENT_WIZARD_TRIGGER_PATTERN.matcher(normalized).find();
+    }
+
+    private String sanitizeRecognizedText(String text) {
+        if (text == null) {
+            return null;
+        }
+        String compact = text
+                .replace('\u00A0', ' ')
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replace('\u2013', '-')
+                .replace('\u2014', '-')
+                .replace('\u2212', '-')
+                .replace('\u2018', '\'')
+                .replace('\u2019', '\'')
+                .replace('\u201C', '"')
+                .replace('\u201D', '"')
+                .replace('ё', 'е')
+                .replace('Ё', 'Е')
+                .trim()
+                .replaceAll("\\s+", " ");
+
+        compact = compact.replaceAll("^[\\p{Punct}\\s]+", "").replaceAll("[\\p{Punct}\\s]+$", "");
+        return compact.isBlank() ? text.trim() : compact;
+    }
+
+    private String normalizeCommandText(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replace('ё', 'е')
+                .replaceAll("[^\\p{L}\\p{N}/]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private WizardResult processEventWizardStep(User user, EventCreationSession session, String text, ZoneId zoneId) {
+        if (session.getStep() == null) {
+            session.setStep(EventCreationStep.WAIT_DATE);
+        }
+
+        String input = text == null ? "" : text.trim();
+        if (input.isBlank()) {
+            return new WizardResult("Я не вижу ответа. Напишите текстом или нажмите ❌ Отмена.", false);
+        }
+
+        if (session.getStep() == EventCreationStep.WAIT_DATE) {
+            LocalDate date = parseDate(input, zoneId);
+            if (date == null) {
+                eventCreationSessionRepository.save(session);
+                return new WizardResult("Не распознал дату. Пример: 21.02.2026 или 21 февраля", false);
+            }
+            session.setMeetingDate(date);
+            session.setStep(EventCreationStep.WAIT_TIME);
+            eventCreationSessionRepository.save(session);
+            return new WizardResult("Шаг 2/4: во сколько? (например: 14:30 или в 14 часов)", false);
+        }
+
+        if (session.getStep() == EventCreationStep.WAIT_TIME) {
+            LocalTime time = parseTime(input);
+            if (time == null) {
+                eventCreationSessionRepository.save(session);
+                return new WizardResult("Не распознал время. Пример: 14:30 или в 14 часов", false);
+            }
+            session.setMeetingTime(time);
+            session.setStep(EventCreationStep.WAIT_TITLE);
+            eventCreationSessionRepository.save(session);
+            return new WizardResult("Шаг 3/4: как назвать событие?", false);
+        }
+
+        if (session.getStep() == EventCreationStep.WAIT_TITLE) {
+            String title = input;
+            if (title.length() > 180) {
+                title = title.substring(0, 180);
+            }
+            session.setMeetingTitle(title);
+            session.setStep(EventCreationStep.WAIT_DURATION);
+            eventCreationSessionRepository.save(session);
+            return new WizardResult("Шаг 4/4: длительность? (например: 30 минут, 1 час, 1.5 часа). Можно написать: пропустить", false);
+        }
+
+        if (session.getStep() == EventCreationStep.WAIT_DURATION) {
+            Integer durationMinutes = parseDurationMinutes(input);
+            if (durationMinutes == null) {
+                eventCreationSessionRepository.save(session);
+                return new WizardResult("Не распознал длительность. Пример: 30 минут, 1 час, 1.5 часа", false);
+            }
+            session.setDurationMinutes(durationMinutes);
+            eventCreationSessionRepository.save(session);
+
+            if (session.getMeetingDate() == null || session.getMeetingTime() == null) {
+                session.setStep(EventCreationStep.WAIT_DATE);
+                eventCreationSessionRepository.save(session);
+                return new WizardResult("Что-то пошло не так — давайте начнем с даты. Пример: 21.02.2026", false);
+            }
+
+            OffsetDateTime startsAt = session.getMeetingDate()
+                    .atTime(session.getMeetingTime())
+                    .atZone(zoneId == null ? ZoneId.of("UTC") : zoneId)
+                    .toOffsetDateTime();
+            OffsetDateTime endsAt = startsAt.plusMinutes(durationMinutes);
+
+            CalendarDay day = getOrCreateDay(user, session.getMeetingDate());
+            Meeting meeting = new Meeting();
+            meeting.setCalendarDay(day);
+            meeting.setTitle(session.getMeetingTitle() == null || session.getMeetingTitle().isBlank() ? "Событие" : session.getMeetingTitle());
+            meeting.setStartsAt(startsAt);
+            meeting.setEndsAt(endsAt);
+            meeting.setStatus(MeetingStatus.CONFIRMED);
+            meetingRepository.save(meeting);
+
+            day.setBusyLevel(day.getBusyLevel() + 1);
+            calendarDayRepository.save(day);
+
+            eventCreationSessionRepository.delete(session);
+            return new WizardResult("✅ Событие создано: " + meeting.getTitle() + "\n🕒 " + startsAt.toLocalDate() + " " + startsAt.toLocalTime().withSecond(0).withNano(0), true);
+        }
+
+        session.setStep(EventCreationStep.WAIT_DATE);
+        eventCreationSessionRepository.save(session);
+        return new WizardResult("Давайте начнем заново. Шаг 1/4: на какую дату?", false);
+    }
+
+    private LocalDate parseDate(String text, ZoneId zoneId) {
+        String normalized = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+
+        Matcher m1 = DATE_PATTERN.matcher(normalized);
+        if (m1.find()) {
+            int day = Integer.parseInt(m1.group(1));
+            int month = Integer.parseInt(m1.group(2));
+            Integer year = null;
+            if (m1.group(3) != null) {
+                year = Integer.parseInt(m1.group(3));
+                if (year < 100) {
+                    year = 2000 + year;
+                }
+            }
+            int resolvedYear = year != null ? year : LocalDate.now(zoneId == null ? ZoneId.of("UTC") : zoneId).getYear();
+            try {
+                LocalDate candidate = LocalDate.of(resolvedYear, month, day);
+                if (year == null) {
+                    LocalDate today = LocalDate.now(zoneId == null ? ZoneId.of("UTC") : zoneId);
+                    if (candidate.isBefore(today.minusDays(1))) {
+                        candidate = candidate.plusYears(1);
+                    }
+                }
+                return candidate;
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        Matcher m2 = DATE_TEXT_PATTERN.matcher(normalized);
+        if (m2.find()) {
+            int day = Integer.parseInt(m2.group(1));
+            String monthText = m2.group(2);
+            Integer month = resolveRuMonth(monthText);
+            if (month == null) {
+                return null;
+            }
+            Integer year = null;
+            if (m2.group(3) != null) {
+                year = Integer.parseInt(m2.group(3));
+            }
+            int resolvedYear = year != null ? year : LocalDate.now(zoneId == null ? ZoneId.of("UTC") : zoneId).getYear();
+            try {
+                LocalDate candidate = LocalDate.of(resolvedYear, month, day);
+                if (year == null) {
+                    LocalDate today = LocalDate.now(zoneId == null ? ZoneId.of("UTC") : zoneId);
+                    if (candidate.isBefore(today.minusDays(1))) {
+                        candidate = candidate.plusYears(1);
+                    }
+                }
+                return candidate;
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private Integer resolveRuMonth(String monthText) {
+        if (monthText == null) {
+            return null;
+        }
+        String key = monthText.trim().toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, Integer> entry : RUS_MONTHS.entrySet()) {
+            if (key.startsWith(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private LocalTime parseTime(String text) {
+        String normalized = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        Matcher m1 = TIME_COLON_PATTERN.matcher(normalized);
+        if (m1.find()) {
+            int hour = Integer.parseInt(m1.group(1));
+            int minute = Integer.parseInt(m1.group(2));
+            try {
+                return LocalTime.of(hour, minute);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        Matcher m2 = TIME_HOUR_ONLY_PATTERN.matcher(normalized);
+        if (m2.find()) {
+            int hour = Integer.parseInt(m2.group(1));
+            try {
+                return LocalTime.of(hour, 0);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Integer parseDurationMinutes(String text) {
+        if (text == null) {
+            return null;
+        }
+        String normalized = text.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        if (normalized.equals("пропустить") || normalized.equals("skip")) {
+            return 60;
+        }
+
+        Matcher mMin = DURATION_MIN_PATTERN.matcher(normalized);
+        if (mMin.find()) {
+            int minutes = Integer.parseInt(mMin.group(1));
+            return minutes > 0 ? minutes : null;
+        }
+
+        Matcher mDec = DURATION_HOUR_DECIMAL_PATTERN.matcher(normalized);
+        if (mDec.find()) {
+            int hours = Integer.parseInt(mDec.group(1));
+            int tenth = Integer.parseInt(mDec.group(2));
+            int minutes = hours * 60 + (int) Math.round(tenth * 6.0);
+            return minutes > 0 ? minutes : null;
+        }
+
+        Matcher mHour = DURATION_HOUR_PATTERN.matcher(normalized);
+        if (mHour.find()) {
+            int hours = Integer.parseInt(mHour.group(1));
+            int minutes = hours * 60;
+            return minutes > 0 ? minutes : null;
+        }
+
+        if (normalized.equals("час") || normalized.equals("1 час") || normalized.equals("один час")) {
+            return 60;
+        }
+
+        return null;
+    }
+
+    private record WizardResult(String message, boolean showMainKeyboard) {
     }
 
     private String buildGoogleConnectMessage(User user) {

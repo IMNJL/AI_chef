@@ -13,29 +13,52 @@ import org.springframework.stereotype.Service;
 public class FallbackVoiceTranscriptionService implements VoiceTranscriptionService {
 
     private final AiProperties aiProperties;
+    private final LocalVoskVoiceTranscriptionService localVoskVoiceTranscriptionService;
     private final GeminiVoiceTranscriptionService geminiVoiceTranscriptionService;
     private final LocalWhisperVoiceTranscriptionService localWhisperVoiceTranscriptionService;
 
     @Override
     public VoiceTranscriptionResult transcribe(String fileId, String mimeType, Integer durationSec) {
-        Exception geminiError = null;
+        Exception localError = null;
 
-        if (aiProperties.hasGeminiKey()) {
+        if (aiProperties.hasVoskModelPath()) {
             try {
-                return geminiVoiceTranscriptionService.transcribe(fileId, mimeType, durationSec);
+                VoiceTranscriptionResult result = localVoskVoiceTranscriptionService.transcribe(fileId, mimeType, durationSec);
+                log.info("STT engine=Vosk fileId={}", fileId);
+                return result;
             } catch (Exception e) {
-                geminiError = e;
-                log.warn("Gemini STT failed, fallback to local Whisper. error={}", e.getMessage());
+                localError = e;
+                log.warn("Vosk STT failed, fallback to Whisper/Gemini. error={}", e.getMessage());
             }
         }
 
         if (aiProperties.hasWhisperCommand()) {
-            return localWhisperVoiceTranscriptionService.transcribe(fileId, mimeType, durationSec);
+            try {
+                VoiceTranscriptionResult result = localWhisperVoiceTranscriptionService.transcribe(fileId, mimeType, durationSec);
+                log.info("STT engine=Whisper fileId={}", fileId);
+                return result;
+            } catch (Exception e) {
+                localError = e;
+                log.warn("Whisper STT failed, fallback to Gemini. error={}", e.getMessage());
+            }
         }
 
-        if (geminiError != null) {
-            throw new IllegalStateException("Voice transcription failed and APP_WHISPER_COMMAND is not configured.", geminiError);
+        if (aiProperties.hasGeminiKey()) {
+            try {
+                VoiceTranscriptionResult result = geminiVoiceTranscriptionService.transcribe(fileId, mimeType, durationSec);
+                log.info("STT engine=Gemini fileId={}", fileId);
+                return result;
+            } catch (Exception e) {
+                if (localError == null) {
+                    localError = e;
+                }
+                log.warn("Gemini STT failed. error={}", e.getMessage());
+            }
         }
-        throw new IllegalStateException("Voice transcription is unavailable. Configure APP_GEMINI_API_KEY or APP_WHISPER_COMMAND.");
+
+        if (localError != null) {
+            throw new IllegalStateException("Voice transcription failed in all configured engines.", localError);
+        }
+        throw new IllegalStateException("Voice transcription is unavailable. Configure APP_VOSK_MODEL_PATH, APP_WHISPER_COMMAND or APP_GEMINI_API_KEY.");
     }
 }

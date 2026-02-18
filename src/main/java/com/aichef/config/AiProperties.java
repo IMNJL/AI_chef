@@ -10,7 +10,10 @@ public record AiProperties(
         String ollamaBaseUrl,
         String ollamaModel,
         String whisperCommand,
-        String whisperModel
+        String whisperModel,
+        String whisperFallbackModel,
+        String voskPython,
+        String voskModelPath
 ) {
     public boolean hasGeminiKey() {
         return geminiApiKey != null && !geminiApiKey.isBlank();
@@ -22,5 +25,13 @@ public record AiProperties(
 
     public boolean hasWhisperCommand() {
         return whisperCommand != null && !whisperCommand.isBlank();
+    }
+
+    public boolean hasWhisperFallbackModel() {
+        return whisperFallbackModel != null && !whisperFallbackModel.isBlank();
+    }
+
+    public boolean hasVoskModelPath() {
+        return voskModelPath != null && !voskModelPath.isBlank();
     }
 }
