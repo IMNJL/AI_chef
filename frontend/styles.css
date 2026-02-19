@@ -28,12 +28,10 @@ body {
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 212px 1fr;
+  grid-template-columns: 1fr;
 }
 
-.app.sidebar-collapsed {
-  grid-template-columns: 62px 1fr;
-}
+.app.sidebar-hidden { grid-template-columns: 1fr; }
 
 @supports (height: 100dvh) {
   .app {
@@ -49,6 +47,34 @@ body {
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 212px;
+  transform: translateX(-105%);
+  transition: transform 0.18s ease;
+  z-index: 40;
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.12);
+}
+
+.app.sidebar-open .sidebar {
+  transform: translateX(0);
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 35;
+}
+
+.app.sidebar-open .sidebar-backdrop {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .sidebar-logo-slot {
@@ -290,6 +316,13 @@ body {
   overflow: hidden;
   z-index: 3;
   background: transparent;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--hour-row) - 1px),
+    var(--line) calc(var(--hour-row) - 1px),
+    var(--line) var(--hour-row)
+  );
 }
 
 .now-layer {
@@ -621,17 +654,17 @@ body {
 
 @media (max-width: 960px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  .sidebar { width: 180px; }
   .topbar { grid-template-columns: 1fr; }
   .sidebar-toggle { display: none; }
   .clock { font-size: 18px; }
 }
 
 /* Telegram Mini App: обычно маленькое окно и меньше вертикального места */
-.tg .app { grid-template-columns: 160px 1fr; }
-.tg .app.sidebar-collapsed { grid-template-columns: 54px 1fr; }
+.tg .app { grid-template-columns: 1fr; }
 .tg .sidebar {
   display: flex;
+  width: 168px;
   padding: calc(10px + var(--safe-top)) 6px calc(8px + var(--safe-bottom));
   gap: 8px;
 }
@@ -707,7 +740,7 @@ body {
   :root { --hour-row: 26px; }
   .main { padding: 16px; }
   .title { font-size: 22px; }
-  .topbar { gap: 12px; }
+  .topbar { gap: 12px; grid-template-columns: auto 1fr auto; }
   .actions { flex-wrap: wrap; }
   .ghost { padding: 8px 12px; }
   .calendar-header { flex-wrap: wrap; gap: 10px; }
@@ -718,48 +751,8 @@ body {
   .event { font-size: 12px; padding: 6px 7px; }
 }
 
-.app.sidebar-collapsed .sidebar {
-  padding: 12px 6px;
-}
-
-.app.sidebar-collapsed .logo {
-  justify-content: center;
-}
-
-.app.sidebar-collapsed .logo-text,
-.app.sidebar-collapsed .nav-item {
-  font-size: 0;
-}
-
-.app.sidebar-collapsed .nav-item {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  margin: 0 auto;
-  border-radius: 10px;
-}
-
-.app.sidebar-collapsed .nav-item::before {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  color: #4b5563;
-}
-
-.app.sidebar-collapsed .nav-item:nth-child(1)::before { content: "📅"; }
-.app.sidebar-collapsed .nav-item:nth-child(2)::before { content: "🏠"; }
-.app.sidebar-collapsed .nav-item:nth-child(3)::before { content: "📝"; }
-.app.sidebar-collapsed .nav-item:nth-child(4)::before { content: "⚙️"; }
-
-.app.sidebar-collapsed .nav-item.active::before {
-  color: var(--accent);
-}
-
-.app.sidebar-collapsed .sidebar-footer {
-  display: none;
+.app.sidebar-hidden .sidebar {
+  transform: translateX(-105%);
 }
 
 @media (max-width: 420px) {

@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="app sidebar-hidden">
     <aside class="sidebar">
       <div class="sidebar-logo-slot"></div>
       <div class="logo">
@@ -28,10 +28,11 @@
         <div class="note">Mini App через GitHub Pages</div>
       </div>
     </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
     <main class="main">
       <header class="topbar">
-        <button class="sidebar-toggle ghost" id="sidebarToggle" title="Свернуть меню">‹</button>
+        <button class="sidebar-toggle ghost" id="sidebarToggle" title="Открыть меню">☰</button>
         <div class="title">Расписание</div>
         <div class="actions">
           <button class="ghost" id="todayBtn">Сегодня</button>

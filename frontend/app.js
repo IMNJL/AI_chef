@@ -59,6 +59,7 @@
 		newBtn: document.getElementById("newBtn"),
 		reloadBtn: document.getElementById("reloadBtn"),
 		sidebarToggle: document.getElementById("sidebarToggle"),
+		sidebarBackdrop: document.getElementById("sidebarBackdrop"),
 		userName: document.getElementById("userName"),
 		userId: document.getElementById("userId"),
 		syncStatus: document.getElementById("syncStatus"),
@@ -89,7 +90,6 @@
 	init();
 
 	function init() {
-		applySidebarState();
 		hydrateUser();
 		bindUi();
 		render();
@@ -178,9 +178,12 @@
 
 		if (el.sidebarToggle) {
 			el.sidebarToggle.addEventListener("click", () => {
-				document.querySelector(".app")?.classList.toggle("sidebar-collapsed");
-				updateSidebarToggleLabel();
-				persistSidebarState();
+				toggleSidebar();
+			});
+		}
+		if (el.sidebarBackdrop) {
+			el.sidebarBackdrop.addEventListener("click", () => {
+				closeSidebar();
 			});
 		}
 
@@ -980,39 +983,36 @@
 	function applySidebarState() {
 		const app = document.querySelector(".app");
 		if (!app) return;
-		let collapsed = false;
-		let hasStoredValue = false;
-		try {
-			const stored = localStorage.getItem("miniapp_sidebar_collapsed");
-			hasStoredValue = stored === "0" || stored === "1";
-			collapsed = stored === "1";
-		} catch {
-			// ignore
-		}
-		if (!hasStoredValue && tg) {
-			collapsed = true;
-		}
-		if (collapsed) {
-			app.classList.add("sidebar-collapsed");
-		}
-		updateSidebarToggleLabel();
+		app.classList.add("sidebar-hidden");
 	}
 
 	function persistSidebarState() {
 		const app = document.querySelector(".app");
 		if (!app) return;
-		try {
-			localStorage.setItem("miniapp_sidebar_collapsed", app.classList.contains("sidebar-collapsed") ? "1" : "0");
-		} catch {
-			// ignore
+		if (app.classList.contains("sidebar-open")) {
+			app.classList.remove("sidebar-open");
 		}
 	}
 
 	function updateSidebarToggleLabel() {
 		if (!el.sidebarToggle) return;
-		const collapsed = document.querySelector(".app")?.classList.contains("sidebar-collapsed");
-		el.sidebarToggle.textContent = collapsed ? "›" : "‹";
-		el.sidebarToggle.title = collapsed ? "Развернуть меню" : "Свернуть меню";
+		const open = document.querySelector(".app")?.classList.contains("sidebar-open");
+		el.sidebarToggle.textContent = open ? "✕" : "☰";
+		el.sidebarToggle.title = open ? "Закрыть меню" : "Открыть меню";
+	}
+
+	function toggleSidebar() {
+		const app = document.querySelector(".app");
+		if (!app) return;
+		app.classList.toggle("sidebar-open");
+		updateSidebarToggleLabel();
+	}
+
+	function closeSidebar() {
+		const app = document.querySelector(".app");
+		if (!app) return;
+		app.classList.remove("sidebar-open");
+		updateSidebarToggleLabel();
 	}
 
 	function startOfDay(d) {
