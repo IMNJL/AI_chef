@@ -30,6 +30,10 @@ body {
   grid-template-columns: 260px 1fr;
 }
 
+.app.sidebar-collapsed {
+  grid-template-columns: 84px 1fr;
+}
+
 @supports (height: 100dvh) {
   .app {
     min-height: 100dvh;
@@ -43,6 +47,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow: hidden;
+}
+
+.sidebar-logo-slot {
+  min-height: 10px;
 }
 
 .logo {
@@ -104,9 +113,18 @@ body {
 
 .topbar {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: auto 1fr auto auto auto;
   align-items: center;
   gap: 20px;
+}
+
+.sidebar-toggle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .title { font-size: 28px; font-weight: 700; }
@@ -356,6 +374,14 @@ body {
   background: #fff;
 }
 
+.time-cell.early-hour {
+  color: transparent;
+}
+
+.grid-cell.early-hour {
+  opacity: 0.7;
+}
+
 .event {
   position: absolute;
   left: 6px;
@@ -598,6 +624,7 @@ body {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .topbar { grid-template-columns: 1fr; }
+  .sidebar-toggle { display: none; }
   .clock { font-size: 18px; }
 }
 
@@ -627,6 +654,10 @@ body {
 .tg .topbar {
   grid-template-columns: 1fr auto;
   gap: 10px;
+}
+
+.tg .sidebar-toggle {
+  display: none;
 }
 
 .tg .title {
@@ -679,6 +710,50 @@ body {
   .grid.month-mode .grid-body { grid-template-rows: repeat(6, 120px); }
   .time-cell { padding-right: 8px; }
   .event { font-size: 12px; padding: 6px 7px; }
+}
+
+.app.sidebar-collapsed .sidebar {
+  padding: 18px 12px;
+}
+
+.app.sidebar-collapsed .logo {
+  justify-content: center;
+}
+
+.app.sidebar-collapsed .logo-text,
+.app.sidebar-collapsed .nav-item {
+  font-size: 0;
+}
+
+.app.sidebar-collapsed .nav-item {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0 auto;
+  border-radius: 12px;
+}
+
+.app.sidebar-collapsed .nav-item::before {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  color: #4b5563;
+}
+
+.app.sidebar-collapsed .nav-item:nth-child(1)::before { content: "Р"; }
+.app.sidebar-collapsed .nav-item:nth-child(2)::before { content: "Г"; }
+.app.sidebar-collapsed .nav-item:nth-child(3)::before { content: "З"; }
+.app.sidebar-collapsed .nav-item:nth-child(4)::before { content: "С"; }
+
+.app.sidebar-collapsed .nav-item.active::before {
+  color: var(--accent);
+}
+
+.app.sidebar-collapsed .sidebar-footer {
+  display: none;
 }
 
 @media (max-width: 420px) {

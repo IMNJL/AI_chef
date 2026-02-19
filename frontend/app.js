@@ -55,6 +55,7 @@
 		todayBtn: document.getElementById("todayBtn"),
 		newBtn: document.getElementById("newBtn"),
 		reloadBtn: document.getElementById("reloadBtn"),
+		sidebarToggle: document.getElementById("sidebarToggle"),
 		userName: document.getElementById("userName"),
 		userId: document.getElementById("userId"),
 		syncStatus: document.getElementById("syncStatus"),
@@ -85,6 +86,7 @@
 	init();
 
 	function init() {
+		applySidebarState();
 		hydrateUser();
 		bindUi();
 		render();
@@ -171,6 +173,14 @@
 			openCreateModal();
 		});
 
+		if (el.sidebarToggle) {
+			el.sidebarToggle.addEventListener("click", () => {
+				document.querySelector(".app")?.classList.toggle("sidebar-collapsed");
+				updateSidebarToggleLabel();
+				persistSidebarState();
+			});
+		}
+
 		el.pills.forEach((pill) => {
 			pill.addEventListener("click", () => {
 				const view = pill.getAttribute("data-view");
@@ -247,12 +257,20 @@
 		for (let hour = 0; hour < 24; hour++) {
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
-			timeCell.textContent = `${pad2(hour)}:00`;
+			if (hour < 7) {
+				timeCell.classList.add("early-hour");
+				timeCell.textContent = "";
+			} else {
+				timeCell.textContent = `${pad2(hour)}:00`;
+			}
 			el.gridBody.appendChild(timeCell);
 
 			for (let d = 0; d < 7; d++) {
 				const cell = document.createElement("div");
 				cell.className = "grid-cell";
+				if (hour < 7) {
+					cell.classList.add("early-hour");
+				}
 				if (todayIndex === d) {
 					cell.classList.add("today");
 				}
@@ -277,7 +295,7 @@
 		el.gridBody.appendChild(nowLayer);
 
 		updateNowLine();
-		scrollToNowIfVisible();
+		scrollToPreferredHour();
 	}
 
 	function renderMonthGrid() {
@@ -379,13 +397,7 @@
 	}
 
 	async function loadMeetings(from, to) {
-		if (!apiBaseUrl) {
-			el.syncStatus.textContent = "Не настроен API (config.js)";
-			state.meetings = [];
-			return [];
-		}
-
-		const url = new URL(apiBaseUrl + "/api/miniapp/meetings");
+		const url = new URL(getApiBaseUrl() + "/api/miniapp/meetings");
 		url.searchParams.set("from", from);
 		url.searchParams.set("to", to);
 
@@ -651,8 +663,6 @@
 	}
 
 	async function moveMeetingByDrag(ev, dayIndex, deltaDays, deltaMinutes) {
-		if (!apiBaseUrl) return;
-
 		const originalStart = new Date(ev.startsAt);
 		const originalEnd = new Date(ev.endsAt);
 		if (Number.isNaN(originalStart.getTime()) || Number.isNaN(originalEnd.getTime())) return;
@@ -677,7 +687,6 @@
 	}
 
 	async function resizeMeetingByHandle(ev, deltaMinutes) {
-		if (!apiBaseUrl) return;
 		const start = new Date(ev.startsAt);
 		const end = new Date(ev.endsAt);
 		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
@@ -743,13 +752,15 @@
 		nowLayer.appendChild(line);
 	}
 
-	function scrollToNowIfVisible() {
+	function scrollToPreferredHour() {
 		if (state.view !== "week") return;
 		const now = new Date();
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
-		if (now < weekStart || now >= weekEnd) return;
-		const minutes = now.getHours() * 60 + now.getMinutes();
+		let minutes = 7 * 60;
+		if (now >= weekStart && now < weekEnd && now.getHours() >= 7) {
+			minutes = now.getHours() * 60 + now.getMinutes();
+		}
 		const top = (minutes / 60) * getHourRowHeightPx();
 		el.gridBody.scrollTop = Math.max(0, top - 120);
 	}
@@ -784,10 +795,6 @@
 	}
 
 	function openCreateModal(seedDate = null) {
-		if (!apiBaseUrl) {
-			alert("API не настроен. Укажи PUBLIC_API_BASE_URL для mini app.");
-			return;
-		}
 		state.editingId = null;
 		el.modalTitle.textContent = "Новое событие";
 		el.deleteBtn.style.visibility = "hidden";
@@ -831,11 +838,6 @@
 	}
 
 	async function saveMeetingFromModal() {
-		if (!apiBaseUrl) {
-			alert("API не настроен. Укажи PUBLIC_API_BASE_URL для mini app.");
-			return;
-		}
-
 		const payload = {
 			title: (el.eventTitle.value || "").trim(),
 			startsAt: toOffsetIsoFromInput(el.eventStart.value),
@@ -866,7 +868,7 @@
 	}
 
 	async function deleteMeetingFromModal() {
-		if (!apiBaseUrl || !state.editingId) return;
+		if (!state.editingId) return;
 		if (!confirm("Удалить событие?")) return;
 
 		const telegramId = getTelegramIdFromUrl();
@@ -875,7 +877,7 @@
 		if (initData) headers["X-Telegram-Init-Data"] = initData;
 
 		try {
-			const url = new URL(apiBaseUrl + `/api/miniapp/meetings/${state.editingId}`);
+			const url = new URL(getApiBaseUrl() + `/api/miniapp/meetings/${state.editingId}`);
 			if (!initData && telegramId) {
 				url.searchParams.set("telegramId", String(telegramId));
 			}
@@ -900,7 +902,7 @@
 		if (initData) headers["X-Telegram-Init-Data"] = initData;
 
 		try {
-			const url = new URL(apiBaseUrl + "/api/miniapp/meetings");
+			const url = new URL(getApiBaseUrl() + "/api/miniapp/meetings");
 			if (!initData && telegramId) {
 				url.searchParams.set("telegramId", String(telegramId));
 			}
@@ -930,7 +932,7 @@
 
 		try {
 			el.syncStatus.textContent = "Сохраняю...";
-			const url = new URL(apiBaseUrl + `/api/miniapp/meetings/${id}`);
+			const url = new URL(getApiBaseUrl() + `/api/miniapp/meetings/${id}`);
 			if (!initData && telegramId) {
 				url.searchParams.set("telegramId", String(telegramId));
 			}
@@ -964,6 +966,42 @@
 		} catch {
 			return null;
 		}
+	}
+
+	function getApiBaseUrl() {
+		return apiBaseUrl || window.location.origin;
+	}
+
+	function applySidebarState() {
+		const app = document.querySelector(".app");
+		if (!app) return;
+		let collapsed = false;
+		try {
+			collapsed = localStorage.getItem("miniapp_sidebar_collapsed") === "1";
+		} catch {
+			// ignore
+		}
+		if (collapsed) {
+			app.classList.add("sidebar-collapsed");
+		}
+		updateSidebarToggleLabel();
+	}
+
+	function persistSidebarState() {
+		const app = document.querySelector(".app");
+		if (!app) return;
+		try {
+			localStorage.setItem("miniapp_sidebar_collapsed", app.classList.contains("sidebar-collapsed") ? "1" : "0");
+		} catch {
+			// ignore
+		}
+	}
+
+	function updateSidebarToggleLabel() {
+		if (!el.sidebarToggle) return;
+		const collapsed = document.querySelector(".app")?.classList.contains("sidebar-collapsed");
+		el.sidebarToggle.textContent = collapsed ? "›" : "‹";
+		el.sidebarToggle.title = collapsed ? "Развернуть меню" : "Свернуть меню";
 	}
 
 	function startOfDay(d) {
