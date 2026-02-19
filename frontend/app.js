@@ -92,6 +92,7 @@
 	function init() {
 		hydrateUser();
 		bindUi();
+		updateSidebarToggleLabel();
 		render();
 		scheduleNowClockAndLine();
 	}
@@ -978,20 +979,6 @@
 
 	function getApiBaseUrl() {
 		return apiBaseUrl || window.location.origin;
-	}
-
-	function applySidebarState() {
-		const app = document.querySelector(".app");
-		if (!app) return;
-		app.classList.add("sidebar-hidden");
-	}
-
-	function persistSidebarState() {
-		const app = document.querySelector(".app");
-		if (!app) return;
-		if (app.classList.contains("sidebar-open")) {
-			app.classList.remove("sidebar-open");
-		}
 	}
 
 	function updateSidebarToggleLabel() {
