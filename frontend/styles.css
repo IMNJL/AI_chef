@@ -326,7 +326,8 @@ body {
 
 .pill {
   border: 1px solid var(--line);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
   padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
@@ -334,7 +335,7 @@ body {
 
 .pill.active {
   background: var(--accent);
-  color: #fff;
+  color: #111827;
   border-color: var(--accent);
 }
 
@@ -450,41 +451,49 @@ body {
 }
 
 .head-cell {
-  padding: 6px;
+  padding: 10px 6px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .head-cell.today {
-  background: var(--accent-soft);
-  border-top: 2px solid var(--accent);
+  background: transparent;
+  border-top: 0;
 }
 
 .head-day {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
   width: 100%;
 }
 
 .head-main {
-  display: flex;
-  align-items: baseline;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
 }
 
 .day-num {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text);
   line-height: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
 }
 
 .day-dow {
-  margin-left: 4px;
+  margin-left: 0;
   font-size: 12px;
   color: var(--muted);
   line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .head-day .dow {
@@ -503,7 +512,12 @@ body {
 
 .head-day.today .day-num,
 .head-day.today .day-dow {
-  color: var(--accent);
+  color: var(--text);
+}
+
+.head-cell.today .day-num {
+  background: var(--accent);
+  color: #111827;
 }
 
 .time-cell {
@@ -777,20 +791,11 @@ body {
 }
 
 @media (max-width: 960px) {
-  .app { grid-template-columns: 1fr; }
-  .sidebar { width: 180px; }
-  .topbar { grid-template-columns: auto 1fr auto; }
-  .clock { font-size: 18px; }
+  :root { --hour-row: 52px; }
+  .month-btn { font-size: 24px; }
 }
 
 /* Telegram Mini App: обычно маленькое окно и меньше вертикального места */
-.tg .app { grid-template-columns: 1fr; }
-.tg .sidebar {
-  display: flex;
-  width: 168px;
-  padding: calc(10px + var(--safe-top)) 6px calc(8px + var(--safe-bottom));
-  gap: 8px;
-}
 .tg .app {
   min-height: var(--tg-viewport-height, 100vh);
 }
@@ -801,56 +806,10 @@ body {
   }
 }
 
-.tg .main {
-  padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
-  gap: 12px;
+/* iOS: иногда кнопку закрытия рисуют поверх webview */
+.tg.ios .appbar {
+  padding-top: calc(10px + max(var(--safe-top), 28px));
 }
-
-.tg.ios .main {
-  padding-top: calc(12px + max(var(--safe-top), 28px));
-}
-
-/* Компактная шапка, чтобы не залезать под Dynamic Island и кнопку закрытия */
-.tg .topbar {
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-}
-
-.tg .sidebar-toggle {
-  display: inline-grid;
-  place-items: center;
-}
-
-.tg .title {
-  font-size: 20px;
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.tg .clock {
-  font-size: 16px;
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
-}
-
-.tg .actions {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tg .user {
-  display: none;
-}
-
-.tg .ghost {
-  padding: 7px 10px;
-}
-
-.tg .calendar { padding: 10px; }
 
 @supports (height: 100dvh) {
   .tg .grid-body,
@@ -860,16 +819,9 @@ body {
 }
 
 @media (max-width: 720px) {
-  :root { --hour-row: 26px; }
-  .main { padding: 16px; }
-  .title { font-size: 22px; }
-  .topbar { gap: 12px; grid-template-columns: auto 1fr auto; }
-  .actions { flex-wrap: wrap; }
-  .ghost { padding: 8px 12px; }
-  .calendar-header { flex-wrap: wrap; gap: 10px; }
-  .pill { padding: 6px 10px; }
-  .grid-body { grid-template-rows: repeat(24, var(--hour-row)); }
-  .grid.month-mode .grid-body { grid-template-rows: repeat(6, 120px); }
+  :root { --hour-row: 46px; }
+  .month-btn { font-size: 22px; }
+  .icon-btn { font-size: 20px; padding: 7px; }
   .time-cell { padding-right: 8px; }
   .event { font-size: 12px; padding: 6px 7px; }
 }
