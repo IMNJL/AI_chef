@@ -126,6 +126,7 @@
 		el.rangeLabel.textContent = formatRange(start, end);
 
 		const today = startOfDay(new Date());
+		const todayIndex = sameDayRangeIndex(startOfDay(start), today);
 
 		// Head
 		el.gridHead.innerHTML = "";
@@ -158,6 +159,9 @@
 			for (let d = 0; d < 7; d++) {
 				const cell = document.createElement("div");
 				cell.className = "grid-cell";
+				if (todayIndex === d) {
+					cell.classList.add("today");
+				}
 				el.gridBody.appendChild(cell);
 			}
 		}
@@ -181,6 +185,7 @@
 		el.gridBody.appendChild(nowLayer);
 
 		updateNowLine();
+		scrollToNowIfVisible();
 	}
 
 	async function loadMeetings() {
@@ -348,8 +353,31 @@
 		line.style.width = `calc(${100 / 7}% )`;
 		const dot = document.createElement("div");
 		dot.className = "now-dot";
+		const label = document.createElement("div");
+		label.className = "now-label";
+		label.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 		line.appendChild(dot);
+		line.appendChild(label);
 		nowLayer.appendChild(line);
+	}
+
+	function scrollToNowIfVisible() {
+		const now = new Date();
+		const weekStart = startOfDay(state.weekStart);
+		const weekEnd = addDays(weekStart, 7);
+		if (now < weekStart || now >= weekEnd) return;
+
+		const minutes = now.getHours() * 60 + now.getMinutes();
+		const top = (minutes / 60) * ROW_HEIGHT_PX;
+		// keep some top padding like in my.itmo (time not glued to the top)
+		el.gridBody.scrollTop = Math.max(0, top - 120);
+	}
+
+	function sameDayRangeIndex(weekStartDay, day) {
+		const a = startOfDay(weekStartDay).getTime();
+		const b = startOfDay(day).getTime();
+		const diffDays = Math.floor((b - a) / (24 * 60 * 60 * 1000));
+		return diffDays >= 0 && diffDays < 7 ? diffDays : -1;
 	}
 
 	function openCreateModal() {
