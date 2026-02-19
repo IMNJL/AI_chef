@@ -57,6 +57,7 @@ public class GoogleCalendarService {
                             .path("/calendars/{calendarId}/events")
                             .queryParam("singleEvents", true)
                             .queryParam("orderBy", "startTime")
+                            .queryParam("maxResults", 2500)
                             .queryParam("timeMin", timeMin.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
                             .queryParam("timeMax", timeMax.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
                             .build(calendarId))
@@ -71,7 +72,7 @@ public class GoogleCalendarService {
         }
     }
 
-    public String createEvent(User user, String title, OffsetDateTime startsAt, OffsetDateTime endsAt, String externalLink, ZoneId zoneId) {
+    public CreatedGoogleEvent createEvent(User user, String title, OffsetDateTime startsAt, OffsetDateTime endsAt, String externalLink, ZoneId zoneId) {
         String calendarId = resolveCalendarId(user);
         String accessToken = resolveAccessToken(user);
         if (calendarId == null || accessToken == null) {
@@ -104,12 +105,18 @@ public class GoogleCalendarService {
             if (response == null) {
                 return null;
             }
+            Object eventId = response.get("id");
             Object htmlLink = response.get("htmlLink");
-            return htmlLink instanceof String s ? s : null;
+            String id = eventId instanceof String s ? s : null;
+            String link = htmlLink instanceof String s ? s : null;
+            return new CreatedGoogleEvent(id, link);
         } catch (Exception e) {
             log.error("Failed to create Google Calendar event: {}", e.getMessage());
             return null;
         }
+    }
+
+    public record CreatedGoogleEvent(String eventId, String htmlLink) {
     }
 
     private synchronized String getAccessToken(UserGoogleConnection connection) {

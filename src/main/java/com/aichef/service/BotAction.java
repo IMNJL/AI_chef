@@ -6,6 +6,7 @@ public enum BotAction {
     SHOW_SCHEDULE,
     CREATE_NOTE,
     EDIT_NOTE,
+    DELETE_NOTE,
     SHOW_NOTES,
     INFO,
     IGNORE,

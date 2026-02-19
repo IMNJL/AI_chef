@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 public class LocalWhisperVoiceTranscriptionService implements VoiceTranscriptionService {
 
     private static final long DOWNLOAD_ERROR_COOLDOWN_SEC = 30 * 60;
-    private static final long WHISPER_TIMEOUT_SEC = 30 * 60;
+    private static final long WHISPER_TIMEOUT_SEC = 5 * 60;
     private static final int MIN_REASONABLE_TEXT_LENGTH = 12;
     private static final int MIN_LETTER_COUNT = 6;
 

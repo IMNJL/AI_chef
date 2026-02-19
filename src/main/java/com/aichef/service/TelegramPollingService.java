@@ -3,8 +3,9 @@ package com.aichef.service;
 import com.aichef.config.TelegramProperties;
 import com.aichef.dto.TelegramWebhookUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -15,19 +16,33 @@ import org.springframework.web.client.RestClientException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TelegramPollingService {
 
     private final TelegramProperties properties;
     private final RestClient telegramRestClient;
     private final TelegramBotService telegramBotService;
     private final ObjectMapper objectMapper;
+    private final Executor telegramUpdateExecutor;
+
+    @Autowired
+    public TelegramPollingService(TelegramProperties properties,
+                                  RestClient telegramRestClient,
+                                  TelegramBotService telegramBotService,
+                                  ObjectMapper objectMapper,
+                                  @Qualifier("telegramUpdateExecutor") Executor telegramUpdateExecutor) {
+        this.properties = properties;
+        this.telegramRestClient = telegramRestClient;
+        this.telegramBotService = telegramBotService;
+        this.objectMapper = objectMapper;
+        this.telegramUpdateExecutor = telegramUpdateExecutor;
+    }
 
     private final AtomicLong offset = new AtomicLong(0);
     private final AtomicBoolean pollingConflictLogged = new AtomicBoolean(false);
@@ -67,7 +82,14 @@ public class TelegramPollingService {
                 }
                 log.info("Polled Telegram update. updateId={}, hasMessage={}",
                         update.update_id(), update.message() != null);
-                telegramBotService.handleUpdate(update);
+                telegramUpdateExecutor.execute(() -> {
+                    try {
+                        telegramBotService.handleUpdate(update);
+                    } catch (Exception e) {
+                        log.error("Failed to process Telegram update asynchronously. updateId={}, error={}",
+                                update.update_id(), e.getMessage(), e);
+                    }
+                });
             }
         } catch (HttpClientErrorException.Conflict e) {
             String msg = e.getMessage() == null ? "" : e.getMessage();

@@ -1,5 +1,7 @@
 package com.aichef.domain.model;
 
+import com.aichef.service.NoteEditStep;
+import com.aichef.service.NoteEditMode;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,8 +14,8 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "user_google_connections")
-public class UserGoogleConnection {
+@Table(name = "note_edit_sessions")
+public class NoteEditSession {
 
     @Id
     private UUID userId;
@@ -23,23 +25,19 @@ public class UserGoogleConnection {
     @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(name = "google_email")
-    private String googleEmail;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 40)
+    private NoteEditStep step;
 
-    @Column(name = "calendar_id", nullable = false)
-    private String calendarId = "primary";
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private NoteEditMode mode = NoteEditMode.EDIT;
 
-    @Column(name = "ics_token", unique = true, length = 120)
-    private String icsToken;
+    @Column(name = "target_note_id")
+    private UUID targetNoteId;
 
-    @Column(name = "access_token", columnDefinition = "text")
-    private String accessToken;
-
-    @Column(name = "refresh_token", columnDefinition = "text")
-    private String refreshToken;
-
-    @Column(name = "token_expires_at")
-    private OffsetDateTime tokenExpiresAt;
+    @Column(name = "target_note_number")
+    private Integer targetNoteNumber;
 
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt = OffsetDateTime.now();

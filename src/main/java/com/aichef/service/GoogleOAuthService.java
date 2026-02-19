@@ -2,37 +2,50 @@ package com.aichef.service;
 
 import com.aichef.config.GoogleCalendarProperties;
 import com.aichef.config.TelegramProperties;
+import com.aichef.domain.enums.MeetingStatus;
 import com.aichef.domain.model.GoogleOAuthState;
+import com.aichef.domain.model.Meeting;
 import com.aichef.domain.model.User;
 import com.aichef.domain.model.UserGoogleConnection;
 import com.aichef.repository.GoogleOAuthStateRepository;
+import com.aichef.repository.MeetingRepository;
 import com.aichef.repository.UserGoogleConnectionRepository;
 import com.aichef.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class GoogleOAuthService {
+    private static final long STATE_TTL_SEC = 15 * 60;
 
     private final GoogleCalendarProperties googleProperties;
     private final TelegramProperties telegramProperties;
     private final GoogleOAuthStateRepository stateRepository;
     private final UserRepository userRepository;
     private final UserGoogleConnectionRepository connectionRepository;
+    private final MeetingRepository meetingRepository;
+    private final GoogleCalendarService googleCalendarService;
 
     public Optional<String> createConnectUrl(Long telegramId) {
         if (telegramId == null || !googleProperties.isOAuthConfigured()) {
@@ -44,11 +57,11 @@ public class GoogleOAuthService {
             return Optional.empty();
         }
 
-        String state = UUID.randomUUID().toString().replace("-", "");
+        String state = buildSignedState(telegramId);
         GoogleOAuthState oauthState = new GoogleOAuthState();
         oauthState.setState(state);
         oauthState.setTelegramId(telegramId);
-        oauthState.setExpiresAt(OffsetDateTime.now().plusMinutes(15));
+        oauthState.setExpiresAt(OffsetDateTime.now().plusSeconds(STATE_TTL_SEC));
         stateRepository.save(oauthState);
 
         String authUrl = UriComponentsBuilder
@@ -67,22 +80,27 @@ public class GoogleOAuthService {
         return Optional.of(authUrl);
     }
 
-    public String handleCallback(String state, String code) {
+    @Transactional
+    public OAuthCallbackResult handleCallback(String state, String code) {
         if (state == null || state.isBlank() || code == null || code.isBlank()) {
-            return "Missing state or code";
+            return new OAuthCallbackResult(null, false, "Missing state or code");
         }
 
         GoogleOAuthState oauthState = stateRepository.findById(state).orElse(null);
-        if (oauthState == null) {
-            return "Invalid state";
-        }
-        if (oauthState.getExpiresAt().isBefore(OffsetDateTime.now())) {
+        Long telegramId;
+        if (oauthState != null) {
+            if (oauthState.getExpiresAt().isBefore(OffsetDateTime.now())) {
+                stateRepository.deleteById(state);
+                return new OAuthCallbackResult(oauthState.getTelegramId(), false, "Expired state. Retry connect.");
+            }
+            telegramId = oauthState.getTelegramId();
             stateRepository.deleteById(state);
-            return "Expired state. Retry connect.";
+        } else {
+            telegramId = validateSignedStateAndGetTelegramId(state);
+            if (telegramId == null) {
+                return new OAuthCallbackResult(null, false, "Invalid or expired state. Retry connect from Telegram bot.");
+            }
         }
-
-        Long telegramId = oauthState.getTelegramId();
-        stateRepository.deleteById(state);
 
         User user = userRepository.findByTelegramId(telegramId)
                 .orElseGet(() -> {
@@ -97,19 +115,94 @@ public class GoogleOAuthService {
         UserGoogleConnection connection = connectionRepository.findByUser(user)
                 .orElseGet(UserGoogleConnection::new);
         connection.setUser(user);
-        connection.setCalendarId(googleProperties.calendarId() == null || googleProperties.calendarId().isBlank()
+        String assistantCalendarId = ensureAssistantCalendar(tokenResponse.accessToken(), connection.getCalendarId());
+        connection.setCalendarId(assistantCalendarId == null || assistantCalendarId.isBlank()
                 ? "primary"
-                : googleProperties.calendarId());
+                : assistantCalendarId);
         connection.setGoogleEmail(email);
         connection.setAccessToken(tokenResponse.accessToken());
         if (tokenResponse.refreshToken() != null && !tokenResponse.refreshToken().isBlank()) {
             connection.setRefreshToken(tokenResponse.refreshToken());
         }
+        if (connection.getIcsToken() == null || connection.getIcsToken().isBlank()) {
+            connection.setIcsToken(UUID.randomUUID().toString().replace("-", ""));
+        }
         connection.setTokenExpiresAt(OffsetDateTime.now().plusSeconds(tokenResponse.expiresIn()));
         connectionRepository.save(connection);
+        syncExistingMeetings(user);
 
         log.info("Google account connected for telegramId={}, email={}", telegramId, email);
-        return "Google Calendar connected: " + (email == null ? "unknown email" : email);
+        return new OAuthCallbackResult(
+                telegramId,
+                true,
+                "Google Calendar connected: " + (email == null ? "unknown email" : email)
+        );
+    }
+
+    public boolean isConnected(User user) {
+        if (user == null) {
+            return false;
+        }
+        return connectionRepository.findByUser(user)
+                .filter(this::hasUsableConnection)
+                .isPresent();
+    }
+
+    public boolean isConnected(Long telegramId) {
+        if (telegramId == null) {
+            return false;
+        }
+        User user = userRepository.findByTelegramId(telegramId).orElse(null);
+        return isConnected(user);
+    }
+
+    public Optional<String> createIcsUrl(Long telegramId) {
+        if (telegramId == null) {
+            return Optional.empty();
+        }
+        User user = userRepository.findByTelegramId(telegramId).orElse(null);
+        if (user == null) {
+            return Optional.empty();
+        }
+        UserGoogleConnection connection = connectionRepository.findByUser(user).orElse(null);
+        if (connection == null) {
+            return Optional.empty();
+        }
+        String token = connection.getIcsToken();
+        if (token == null || token.isBlank()) {
+            token = UUID.randomUUID().toString().replace("-", "");
+            connection.setIcsToken(token);
+            connectionRepository.save(connection);
+        }
+        String baseUrl = telegramProperties.publicBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            URI uri = URI.create(baseUrl.trim());
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            int port = uri.getPort();
+            if (scheme == null || host == null) {
+                return Optional.empty();
+            }
+            StringBuilder origin = new StringBuilder(scheme).append("://").append(host);
+            if (port > 0) {
+                origin.append(":").append(port);
+            }
+            return Optional.of(origin + "/api/ical/" + token);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean hasUsableConnection(UserGoogleConnection connection) {
+        if (connection == null) {
+            return false;
+        }
+        boolean hasRefreshToken = connection.getRefreshToken() != null && !connection.getRefreshToken().isBlank();
+        boolean hasAccessToken = connection.getAccessToken() != null && !connection.getAccessToken().isBlank();
+        return hasRefreshToken || hasAccessToken;
     }
 
     private TokenResponse exchangeCodeForToken(String code) {
@@ -155,7 +248,154 @@ public class GoogleOAuthService {
         return email instanceof String s ? s : null;
     }
 
+    private void syncExistingMeetings(User user) {
+        if (user == null || !googleCalendarService.isEnabled()) {
+            return;
+        }
+        ZoneId zoneId = resolveZone(user.getTimezone());
+        List<Meeting> meetings = meetingRepository.findByCalendarDay_UserOrderByStartsAtAsc(user);
+        for (Meeting meeting : meetings) {
+            if (meeting.getStatus() == MeetingStatus.CANCELED) {
+                continue;
+            }
+            if (meeting.getGoogleEventId() != null && !meeting.getGoogleEventId().isBlank()) {
+                continue;
+            }
+            GoogleCalendarService.CreatedGoogleEvent created = googleCalendarService.createEvent(
+                    user,
+                    meeting.getTitle(),
+                    meeting.getStartsAt(),
+                    meeting.getEndsAt(),
+                    meeting.getExternalLink(),
+                    zoneId
+            );
+            if (created == null) {
+                continue;
+            }
+            if (created.eventId() != null && !created.eventId().isBlank()) {
+                meeting.setGoogleEventId(created.eventId());
+            }
+            if ((meeting.getExternalLink() == null || meeting.getExternalLink().isBlank())
+                    && created.htmlLink() != null && !created.htmlLink().isBlank()) {
+                meeting.setExternalLink(created.htmlLink());
+            }
+            meetingRepository.save(meeting);
+        }
+    }
+
+    private ZoneId resolveZone(String timezone) {
+        if (timezone == null || timezone.isBlank()) {
+            return ZoneId.of("Europe/Moscow");
+        }
+        try {
+            return ZoneId.of(timezone);
+        } catch (Exception ignored) {
+            return ZoneId.of("Europe/Moscow");
+        }
+    }
+
+    private String ensureAssistantCalendar(String accessToken, String currentCalendarId) {
+        if (accessToken == null || accessToken.isBlank()) {
+            return currentCalendarId;
+        }
+        if (currentCalendarId != null && !currentCalendarId.isBlank() && !"primary".equalsIgnoreCase(currentCalendarId)) {
+            return currentCalendarId;
+        }
+        try {
+            RestClient googleClient = RestClient.builder().baseUrl(googleProperties.safeApiBase()).build();
+            Map<String, Object> createPayload = Map.of(
+                    "summary", "assistant",
+                    "description", "AI Chef assistant calendar",
+                    "timeZone", "Europe/Moscow"
+            );
+            Map<?, ?> created = googleClient.post()
+                    .uri("/calendars")
+                    .header("Authorization", "Bearer " + accessToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(createPayload)
+                    .retrieve()
+                    .body(Map.class);
+
+            String calendarId = created != null && created.get("id") instanceof String id ? id : null;
+            if (calendarId == null || calendarId.isBlank()) {
+                return "primary";
+            }
+
+            try {
+                RestClient listClient = RestClient.builder().baseUrl("https://www.googleapis.com/calendar/v3").build();
+                Map<String, Object> colorPayload = Map.of("colorId", "6");
+                listClient.patch()
+                        .uri("/users/me/calendarList/{calendarId}", calendarId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(colorPayload)
+                        .retrieve()
+                        .toBodilessEntity();
+            } catch (Exception ignored) {
+                // color is best-effort only
+            }
+
+            return calendarId;
+        } catch (Exception e) {
+            log.warn("Failed to create assistant calendar: {}", e.getMessage());
+            return "primary";
+        }
+    }
+
     private record TokenResponse(String accessToken, String refreshToken, long expiresIn) {
+    }
+
+    public record OAuthCallbackResult(Long telegramId, boolean connected, String message) {
+    }
+
+    private String buildSignedState(Long telegramId) {
+        long exp = OffsetDateTime.now().plusSeconds(STATE_TTL_SEC).toEpochSecond();
+        String nonce = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String payload = telegramId + ":" + exp + ":" + nonce;
+        String signature = signPayload(payload);
+        String payloadPart = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        return payloadPart + "." + signature;
+    }
+
+    private Long validateSignedStateAndGetTelegramId(String state) {
+        try {
+            String[] parts = state.split("\\.");
+            if (parts.length != 2) {
+                return null;
+            }
+            String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+            String expectedSig = signPayload(payload);
+            if (!expectedSig.equals(parts[1])) {
+                return null;
+            }
+            String[] payloadParts = payload.split(":");
+            if (payloadParts.length != 3) {
+                return null;
+            }
+            long telegramId = Long.parseLong(payloadParts[0]);
+            long exp = Long.parseLong(payloadParts[1]);
+            if (OffsetDateTime.now().toEpochSecond() > exp) {
+                return null;
+            }
+            return telegramId;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String signPayload(String payload) {
+        try {
+            String secret = (googleProperties.clientSecret() == null ? "" : googleProperties.clientSecret())
+                    + "|"
+                    + (telegramProperties.botToken() == null ? "" : telegramProperties.botToken());
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] raw = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to sign OAuth state", e);
+        }
     }
 
     private String buildRedirectUri() {

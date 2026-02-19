@@ -9,4 +9,6 @@ import java.util.UUID;
 
 public interface UserGoogleConnectionRepository extends JpaRepository<UserGoogleConnection, UUID> {
     Optional<UserGoogleConnection> findByUser(User user);
+
+    Optional<UserGoogleConnection> findByIcsToken(String icsToken);
 }

@@ -10,4 +10,6 @@ import java.util.UUID;
 
 public interface MeetingRepository extends JpaRepository<Meeting, UUID> {
     List<Meeting> findByCalendarDay_UserAndCalendarDay_DayDateBetweenOrderByStartsAtAsc(User user, LocalDate from, LocalDate to);
+
+    List<Meeting> findByCalendarDay_UserOrderByStartsAtAsc(User user);
 }

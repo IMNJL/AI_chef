@@ -32,6 +32,9 @@ logging:
     com.aichef: ${APP_LOG_LEVEL:INFO}
 
 app:
+  miniapp:
+    public-url: ${MINIAPP_PUBLIC_URL:}
+    allow-insecure: ${MINIAPP_ALLOW_INSECURE:true}
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN}
     bot-username: ${TELEGRAM_BOT_USERNAME}
@@ -40,15 +43,14 @@ app:
     api-base: ${TELEGRAM_API_BASE:https://api.telegram.org}
     public-base-url: ${APP_PUBLIC_BASE_URL:}
     poll-interval-ms: ${TELEGRAM_POLL_INTERVAL_MS:3000}
+    processing-threads: ${TELEGRAM_PROCESSING_THREADS:4}
+    processing-queue-capacity: ${TELEGRAM_PROCESSING_QUEUE_CAPACITY:500}
   ai:
-    gemini-api-key: ${APP_GEMINI_API_KEY:}
-    gemini-model: ${APP_GEMINI_MODEL:gemini-2.0-flash}
-    gemini-base-url: ${APP_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
     ollama-base-url: ${APP_OLLAMA_BASE_URL:}
     ollama-model: ${APP_OLLAMA_MODEL:}
     whisper-command: ${APP_WHISPER_COMMAND:}
     whisper-model: ${APP_WHISPER_MODEL:small}
-    whisper-fallback-model: ${APP_WHISPER_FALLBACK_MODEL:medium}
+    whisper-fallback-model: ${APP_WHISPER_FALLBACK_MODEL:}
     vosk-python: ${APP_VOSK_PYTHON:.venv/bin/python}
     vosk-model-path: ${APP_VOSK_MODEL_PATH:}
   google:

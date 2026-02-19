@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class LocalVoskVoiceTranscriptionService implements VoiceTranscriptionService {
 
-    private static final long VOSK_TIMEOUT_SEC = 10 * 60;
+    private static final long VOSK_TIMEOUT_SEC = 90;
 
     private final RestClient telegramRestClient;
     private final TelegramProperties telegramProperties;

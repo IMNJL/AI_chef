@@ -24,7 +24,7 @@ public class User extends BaseEntity {
     private Long telegramId;
 
     @Column(nullable = false)
-    private String timezone = "UTC";
+    private String timezone = "Europe/Moscow";
 
     @Column(nullable = false)
     private String locale = "ru";
