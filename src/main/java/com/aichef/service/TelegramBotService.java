@@ -28,6 +28,7 @@ import com.aichef.repository.TaskItemRepository;
 import com.aichef.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,6 +104,8 @@ public class TelegramBotService {
     private final VoiceTranscriptionService voiceTranscriptionService;
     private final GoogleCalendarService googleCalendarService;
     private final GoogleOAuthService googleOAuthService;
+    @Value("${app.miniapp.public-url:}")
+    private String miniAppPublicUrl;
 
     @Transactional
     public void handleUpdate(TelegramWebhookUpdate update) {
@@ -216,6 +219,16 @@ public class TelegramBotService {
                 sendMessage(chatId, "Сначала подключите Google Calendar, затем появится ссылка на iCal подписку.", true);
             } else {
                 sendMessage(chatId, "📎 iCalendar подписка (read-only):\n" + icsUrl, true);
+            }
+            return;
+        }
+
+        if (isMiniAppLinkRequest(rawText)) {
+            String miniAppUrl = buildMiniAppUrl();
+            if (miniAppUrl == null || miniAppUrl.isBlank()) {
+                sendMessage(chatId, "Mini App пока не настроен. Укажите MINIAPP_PUBLIC_URL.", true);
+            } else {
+                sendMessage(chatId, "Ссылка на Mini App:\n" + miniAppUrl, true);
             }
             return;
         }
@@ -348,6 +361,47 @@ public class TelegramBotService {
         }
     }
 
+    public void configureMiniAppEntryPoints() {
+        String miniAppUrl = buildMiniAppUrl();
+        if (miniAppUrl == null || miniAppUrl.isBlank()) {
+            return;
+        }
+        try {
+            Map<String, Object> descriptionPayload = Map.of(
+                    "description", "Мини-приложение календаря: " + miniAppUrl
+            );
+            telegramRestClient.post()
+                    .uri("/bot{token}/setMyDescription", properties.botToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(descriptionPayload)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            log.error("Failed to set bot description with miniapp URL. error={}", e.getMessage());
+        }
+
+        if (!isHttpsUrl(miniAppUrl)) {
+            return;
+        }
+        try {
+            Map<String, Object> payload = Map.of(
+                    "menu_button", Map.of(
+                            "type", "web_app",
+                            "text", "Календарь",
+                            "web_app", Map.of("url", miniAppUrl)
+                    )
+            );
+            telegramRestClient.post()
+                    .uri("/bot{token}/setChatMenuButton", properties.botToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            log.error("Failed to set miniapp chat menu button. error={}", e.getMessage());
+        }
+    }
+
     public void deleteWebhook(boolean dropPendingUpdates) {
         Map<String, Object> payload = Map.of("drop_pending_updates", dropPendingUpdates);
         log.info("Delete Telegram webhook requested. dropPendingUpdates={}", dropPendingUpdates);
@@ -373,10 +427,14 @@ public class TelegramBotService {
         firstRow.add(Map.of("text", "📆 Неделя"));
         String miniAppUrl = buildMiniAppUrl();
         if (miniAppUrl != null && !miniAppUrl.isBlank()) {
-            firstRow.add(Map.of(
-                    "text", "🗓 Мини‑календарь",
-                    "web_app", Map.of("url", miniAppUrl)
-            ));
+            if (isHttpsUrl(miniAppUrl)) {
+                firstRow.add(Map.of(
+                        "text", "🗓 Мини‑календарь",
+                        "web_app", Map.of("url", miniAppUrl)
+                ));
+            } else {
+                firstRow.add(Map.of("text", "🌐 Ссылка на miniapp"));
+            }
         }
         keyboard.add(firstRow);
 
@@ -812,6 +870,21 @@ public class TelegramBotService {
                 || normalized.equals("подписка ical")
                 || normalized.equals("ical")
                 || normalized.equals("icalendar");
+    }
+
+    private boolean isMiniAppLinkRequest(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = normalizeCommandText(text);
+        return normalized.equals("🌐 ссылка на miniapp")
+                || normalized.equals("ссылка на miniapp")
+                || normalized.equals("miniapp")
+                || normalized.equals("mini app")
+                || normalized.equals("мини апп")
+                || normalized.equals("миниапп")
+                || normalized.equals("ссылка на миниапп")
+                || normalized.equals("miniapp link");
     }
 
     private WizardResult processNoteEditStep(User user, NoteEditSession session, String text) {
@@ -1463,11 +1536,10 @@ public class TelegramBotService {
         if (miniAppUrl == null || miniAppUrl.isBlank()) {
             return;
         }
-        Map<String, Object> inlineMarkup = Map.of(
-                "inline_keyboard", List.of(
-                        List.of(Map.of("text", "Открыть календарь", "web_app", Map.of("url", miniAppUrl)))
-                )
-        );
+        Map<String, Object> button = isHttpsUrl(miniAppUrl)
+                ? Map.of("text", "Открыть календарь", "web_app", Map.of("url", miniAppUrl))
+                : Map.of("text", "Открыть календарь", "url", miniAppUrl);
+        Map<String, Object> inlineMarkup = Map.of("inline_keyboard", List.of(List.of(button)));
         Long messageId = sendMessageAndGetId(chatId, "Календарь (Mini App):", inlineMarkup);
         if (messageId == null) {
             return;
@@ -1490,10 +1562,7 @@ public class TelegramBotService {
     }
 
     private String buildMiniAppUrl() {
-        String baseUrl = System.getProperty("app.miniapp.public-url");
-        if (baseUrl == null || baseUrl.isBlank()) {
-            baseUrl = System.getenv("MINIAPP_PUBLIC_URL");
-        }
+        String baseUrl = miniAppPublicUrl;
         if (baseUrl == null || baseUrl.isBlank()) {
             baseUrl = properties.publicBaseUrl();
         }
@@ -1519,6 +1588,18 @@ public class TelegramBotService {
             return origin + "/miniapp";
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private boolean isHttpsUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            return "https".equalsIgnoreCase(uri.getScheme());
+        } catch (Exception e) {
+            return false;
         }
     }
     private void sendInlineGoogleConnectButton(Long chatId, String loginUrl, String text) {

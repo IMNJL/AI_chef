@@ -25,6 +25,7 @@ public class TelegramWebhookRegistrar implements ApplicationRunner {
                 properties.webhookPath(),
                 baseUrl != null && !baseUrl.isBlank(),
                 properties.botToken() != null && !properties.botToken().isBlank());
+        telegramBotService.configureMiniAppEntryPoints();
 
         String webhookBaseUrl = resolveWebhookBaseUrl(baseUrl);
         if (webhookBaseUrl == null) {
