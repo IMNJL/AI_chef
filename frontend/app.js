@@ -22,6 +22,7 @@
 		userName: document.getElementById("userName"),
 		userId: document.getElementById("userId"),
 		syncStatus: document.getElementById("syncStatus"),
+		nowClock: document.getElementById("nowClock"),
 		pills: Array.from(document.querySelectorAll(".pill[data-view]")),
 		modal: document.getElementById("eventModal"),
 		modalTitle: document.getElementById("modalTitle"),
@@ -137,12 +138,14 @@
 			const day = addDays(start, d);
 			const cell = document.createElement("div");
 			cell.className = "head-cell";
+			if (sameDay(day, today)) {
+				cell.classList.add("today");
+			}
 			const inner = document.createElement("div");
 			inner.className = "head-day";
 			if (sameDay(day, today)) inner.classList.add("today");
 			inner.innerHTML = `
-				<div class="dow">${formatDow(day)}</div>
-				<div class="date">${formatDayMonth(day)}</div>
+				<div class="head-main"><span class="day-num">${day.getDate()}</span><span class="day-dow">, ${formatDow(day)}</span></div>
 			`;
 			cell.appendChild(inner);
 			el.gridHead.appendChild(cell);
@@ -336,6 +339,9 @@
 		nowLayer.innerHTML = "";
 
 		const now = new Date();
+		if (el.nowClock) {
+			el.nowClock.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+		}
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;

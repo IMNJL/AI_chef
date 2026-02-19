@@ -94,7 +94,7 @@ body {
 
 .topbar {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   align-items: center;
   gap: 20px;
 }
@@ -102,6 +102,13 @@ body {
 .title { font-size: 28px; font-weight: 700; }
 
 .actions { display: flex; gap: 10px; }
+
+.clock {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
 
 .ghost {
   background: #fff;
@@ -235,11 +242,40 @@ body {
 
 .head-cell {
   padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.head-cell.today {
+  background: var(--accent-soft);
+  border-top: 2px solid var(--accent);
 }
 
 .head-day {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  width: 100%;
+}
+
+.head-main {
+  display: flex;
+  align-items: baseline;
+}
+
+.day-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.day-dow {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1;
 }
 
 .head-day .dow {
@@ -253,6 +289,11 @@ body {
 }
 
 .head-day.today .dow {
+  color: var(--accent);
+}
+
+.head-day.today .day-num,
+.head-day.today .day-dow {
   color: var(--accent);
 }
 
@@ -398,4 +439,5 @@ body {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .topbar { grid-template-columns: 1fr; }
+  .clock { font-size: 18px; }
 }

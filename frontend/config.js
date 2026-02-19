@@ -1,1 +1,1 @@
-window.__APP_CONFIG__ = { apiBaseUrl: "http://localhost:8010" };
+window.__APP_CONFIG__ = { apiBaseUrl: "" };

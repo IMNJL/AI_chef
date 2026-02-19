@@ -1617,13 +1617,15 @@ public class TelegramBotService {
 
     private void sendPinnedMiniAppLink(Long chatId) {
         String miniAppUrl = buildMiniAppUrl();
-        if (miniAppUrl == null || miniAppUrl.isBlank()) {
+        if (miniAppUrl == null || miniAppUrl.isBlank() || !isHttpsUrl(miniAppUrl)) {
+            log.info("Skip pin miniapp link: url is missing or not https. url={}", miniAppUrl);
             return;
         }
-        Map<String, Object> button = isHttpsUrl(miniAppUrl)
-                ? Map.of("text", "Открыть календарь", "web_app", Map.of("url", miniAppUrl))
-                : Map.of("text", "Открыть календарь", "url", miniAppUrl);
-        Map<String, Object> inlineMarkup = Map.of("inline_keyboard", List.of(List.of(button)));
+        Map<String, Object> inlineMarkup = Map.of(
+                "inline_keyboard", List.of(
+                        List.of(Map.of("text", "Открыть календарь", "web_app", Map.of("url", miniAppUrl)))
+                )
+        );
         Long messageId = sendMessageAndGetId(chatId, "Календарь (Mini App):", inlineMarkup);
         if (messageId == null) {
             return;
@@ -1647,9 +1649,6 @@ public class TelegramBotService {
 
     private String buildMiniAppUrl() {
         String baseUrl = miniAppPublicUrl;
-        if (baseUrl == null || baseUrl.isBlank()) {
-            baseUrl = properties.publicBaseUrl();
-        }
         if (baseUrl == null || baseUrl.isBlank()) {
             return null;
         }
