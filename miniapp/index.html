@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Chef Calendar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-mark">ai</span>
+        <span class="logo-text">chef</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active">Расписание</button>
+        <button class="nav-item">Главная</button>
+        <button class="nav-item">Заметки</button>
+        <button class="nav-item">Сервисы</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="status" id="syncStatus">Синхронизация включена</div>
+        <div class="note">Mini App через GitHub Pages</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="title">Расписание</div>
+        <div class="actions">
+          <button class="ghost" id="todayBtn">Сегодня</button>
+          <button class="ghost" id="newBtn">Добавить</button>
+          <button class="ghost" id="reloadBtn">Обновить</button>
+        </div>
+        <div class="user">
+          <div class="avatar">AI</div>
+          <div class="user-meta">
+            <div class="user-name" id="userName">Вы</div>
+            <div class="user-id" id="userId"></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="calendar">
+        <div class="calendar-header">
+          <div class="range" id="rangeLabel">Неделя</div>
+          <div class="nav">
+            <button class="ghost" id="prevBtn">◀</button>
+            <button class="ghost" id="nextBtn">▶</button>
+          </div>
+          <div class="view-switch">
+            <button class="pill active" data-view="week">Неделя</button>
+            <button class="pill" data-view="month">Месяц</button>
+          </div>
+        </div>
+
+        <div class="grid" id="calendarGrid">
+          <div class="grid-head" id="gridHead"></div>
+          <div class="grid-body" id="gridBody"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal hidden" id="eventModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle">Событие</div>
+        <button class="ghost" id="closeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>
+          Название
+          <input type="text" id="eventTitle" />
+        </label>
+        <label>
+          Начало (ISO)
+          <input type="text" id="eventStart" placeholder="2026-02-19T12:00:00+03:00" />
+        </label>
+        <label>
+          Конец (ISO)
+          <input type="text" id="eventEnd" placeholder="2026-02-19T13:00:00+03:00" />
+        </label>
+        <label>
+          Локация
+          <input type="text" id="eventLocation" />
+        </label>
+        <label>
+          Ссылка
+          <input type="text" id="eventLink" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="danger" id="deleteBtn">Удалить</button>
+        <button class="primary" id="saveBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
