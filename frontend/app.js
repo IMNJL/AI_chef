@@ -12,6 +12,10 @@
 		tg.ready();
 	}
 	document.documentElement.classList.toggle("tg", Boolean(tg));
+	document.documentElement.classList.toggle(
+		"ios",
+		Boolean(tg && typeof tg.platform === "string" && tg.platform.toLowerCase() === "ios")
+	);
 	if (tg && typeof tg.expand === "function") {
 		try {
 			tg.expand();
