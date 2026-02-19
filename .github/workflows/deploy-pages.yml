@@ -31,7 +31,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      PAGES_TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.pages_target) || vars.PAGES_TARGET || (github.ref_name == 'miniapp' && 'miniapp') || 'frontend' }}
+      PAGES_TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.pages_target) || vars.PAGES_TARGET || 'frontend' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
