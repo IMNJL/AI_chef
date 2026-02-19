@@ -235,7 +235,7 @@ body {
 .grid-body {
   display: grid;
   grid-template-columns: var(--time-col) repeat(7, 1fr);
-  grid-template-rows: repeat(17, 38px);
+  grid-template-rows: repeat(24, 38px);
   border-top: 0;
   border-left: 0;
   max-height: 72vh;
@@ -705,7 +705,7 @@ body {
   .ghost { padding: 8px 12px; }
   .calendar-header { flex-wrap: wrap; gap: 10px; }
   .pill { padding: 6px 10px; }
-  .grid-body { grid-template-rows: repeat(17, 36px); }
+  .grid-body { grid-template-rows: repeat(24, 36px); }
   .grid.month-mode .grid-body { grid-template-rows: repeat(6, 120px); }
   .time-cell { padding-right: 8px; }
   .event { font-size: 12px; padding: 6px 7px; }
@@ -771,7 +771,7 @@ body {
   .day-num { font-size: 14px; }
   .day-dow { font-size: 11px; }
   .grid-body {
-    grid-template-rows: repeat(17, 34px);
+    grid-template-rows: repeat(24, 34px);
     grid-template-columns: var(--time-col) repeat(7, minmax(90px, 1fr));
   }
   .grid.month-mode .grid-body {
