@@ -8,15 +8,6 @@ on:
       - frontend
       - miniapp
   workflow_dispatch:
-    inputs:
-      pages_target:
-        description: "What to deploy to GitHub Pages"
-        required: false
-        default: "frontend"
-        type: choice
-        options:
-          - frontend
-          - miniapp
 
 permissions:
   contents: read
@@ -30,8 +21,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      PAGES_TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.pages_target) || vars.PAGES_TARGET || 'frontend' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,26 +30,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "PAGES_TARGET=${PAGES_TARGET}"
-
           rm -rf dist
           mkdir -p dist
 
           # Disable Jekyll processing
           touch dist/.nojekyll
 
-          # Base static site (HTML/CSS/JS)
-          # We always copy frontend/ first to ensure shared assets exist.
+          # Frontend (HTML/CSS/JS)
           cp -R frontend/* dist/
-
-          # Optional overlay (e.g., miniapp/index.html)
-          if [ "${PAGES_TARGET}" = "miniapp" ]; then
-            if [ -d miniapp ]; then
-              cp -R miniapp/* dist/
-            else
-              echo "miniapp/ directory not found; deploying frontend/ only." >&2
-            fi
-          fi
 
           # Shared static assets (optional)
           if [ -d assets ]; then
@@ -79,10 +56,6 @@ jobs:
           PUBLIC_API_BASE_URL_SECRET: ${{ secrets.PUBLIC_API_BASE_URL }}
         run: |
           set -euo pipefail
-          if [ "${PAGES_TARGET}" != "frontend" ]; then
-            echo "Skipping config.js generation for PAGES_TARGET=${PAGES_TARGET}."
-            exit 0
-          fi
           API_BASE_URL="${PUBLIC_API_BASE_URL_SECRET:-$PUBLIC_API_BASE_URL}"
           API_BASE_URL_TRIMMED="$(printf '%s' "${API_BASE_URL}" | tr -d '\r' | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
           if [ -n "${API_BASE_URL_TRIMMED}" ]; then
