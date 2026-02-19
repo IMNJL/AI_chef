@@ -11,6 +11,35 @@
 	if (tg && typeof tg.ready === "function") {
 		tg.ready();
 	}
+	document.documentElement.classList.toggle("tg", Boolean(tg));
+	if (tg && typeof tg.expand === "function") {
+		try {
+			tg.expand();
+		} catch {
+			// ignore
+		}
+	}
+
+	function updateTelegramViewportCssVars() {
+		const stable = tg && typeof tg.viewportStableHeight === "number" ? tg.viewportStableHeight : 0;
+		const fallback = typeof window.innerHeight === "number" ? window.innerHeight : 0;
+		const h = stable > 0 ? stable : fallback;
+		if (h > 0) {
+			document.documentElement.style.setProperty("--tg-viewport-height", `${Math.round(h)}px`);
+		}
+	}
+
+	if (tg) {
+		updateTelegramViewportCssVars();
+		if (typeof tg.onEvent === "function") {
+			try {
+				tg.onEvent("viewportChanged", updateTelegramViewportCssVars);
+			} catch {
+				// ignore
+			}
+		}
+		window.addEventListener("resize", updateTelegramViewportCssVars, { passive: true });
+	}
 
 	const el = {
 		grid: document.getElementById("calendarGrid"),
@@ -75,6 +104,36 @@
 	}
 
 	function bindUi() {
+		let syncingGridScroll = false;
+		const syncGridScroll = (source) => {
+			if (syncingGridScroll) return;
+			syncingGridScroll = true;
+			try {
+				if (source === "body") {
+					el.gridHead.scrollLeft = el.gridBody.scrollLeft;
+				} else {
+					el.gridBody.scrollLeft = el.gridHead.scrollLeft;
+				}
+			} finally {
+				syncingGridScroll = false;
+			}
+		};
+
+		el.gridBody.addEventListener(
+			"scroll",
+			() => {
+				syncGridScroll("body");
+			},
+			{ passive: true }
+		);
+		el.gridHead.addEventListener(
+			"scroll",
+			() => {
+				syncGridScroll("head");
+			},
+			{ passive: true }
+		);
+
 		el.prevBtn.addEventListener("click", () => {
 			if (state.view === "week") {
 				state.weekStart = addDays(state.weekStart, -7);
@@ -365,6 +424,7 @@
 	}
 
 	function renderWeekEvents() {
+		const rowHeightPx = getHourRowHeightPx();
 		const layers = Array.from(el.gridBody.querySelectorAll(".day-layer"));
 		layers.forEach((l) => {
 			l.innerHTML = "";
@@ -401,13 +461,13 @@
 		dayBuckets.forEach((events, dayIndex) => {
 			const layer = layers.find((l) => Number(l.dataset.dayIndex) === dayIndex);
 			if (!layer) return;
-			renderDayEvents(layer, events, dayIndex);
+			renderDayEvents(layer, events, dayIndex, rowHeightPx);
 		});
 
 		updateNowLine();
 	}
 
-	function renderDayEvents(layer, events, dayIndex) {
+	function renderDayEvents(layer, events, dayIndex, rowHeightPx) {
 		const sorted = events.slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 		const active = [];
 		const assigned = [];
@@ -428,8 +488,11 @@
 		}
 
 		for (const ev of assigned) {
-			const top = (ev.startMin / 60) * ROW_HEIGHT_PX;
-			const height = Math.max(22, ((Math.max(ev.endMin, ev.startMin + 10) - ev.startMin) / 60) * ROW_HEIGHT_PX);
+			const top = (ev.startMin / 60) * rowHeightPx;
+			const height = Math.max(
+				22,
+				((Math.max(ev.endMin, ev.startMin + 10) - ev.startMin) / 60) * rowHeightPx
+			);
 			const widthPercent = 100 / maxLanes;
 			const leftPercent = ev.lane * widthPercent;
 
@@ -460,6 +523,7 @@
 		let startX = 0;
 		let startY = 0;
 		let moved = false;
+		let rowHeightPx = ROW_HEIGHT_PX;
 
 		node.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
@@ -467,6 +531,7 @@
 			startX = e.clientX;
 			startY = e.clientY;
 			moved = false;
+			rowHeightPx = getHourRowHeightPx();
 			node.setPointerCapture(pointerId);
 			node.classList.add("drag-ready");
 			e.preventDefault();
@@ -496,7 +561,7 @@
 
 			const dayWidth = node.parentElement ? node.parentElement.getBoundingClientRect().width : 1;
 			const deltaDays = Math.round(dx / Math.max(dayWidth, 1));
-			const rawMinutes = (dy / ROW_HEIGHT_PX) * 60;
+			const rawMinutes = (dy / Math.max(1, rowHeightPx)) * 60;
 			const deltaMinutes = Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
 			if (deltaDays === 0 && deltaMinutes === 0) return;
 
@@ -517,15 +582,19 @@
 	function bindEventResize(node, handle, ev) {
 		let pointerId = null;
 		let startY = 0;
+		let baseHeightPx = 0;
 		let moved = false;
 		let previewDeltaMinutes = 0;
+		let rowHeightPx = ROW_HEIGHT_PX;
 
 		handle.addEventListener("pointerdown", (e) => {
 			if (e.button !== 0) return;
 			pointerId = e.pointerId;
 			startY = e.clientY;
+			baseHeightPx = node.getBoundingClientRect().height;
 			moved = false;
 			previewDeltaMinutes = 0;
+			rowHeightPx = getHourRowHeightPx();
 			handle.setPointerCapture(pointerId);
 			node.classList.add("resizing");
 			e.preventDefault();
@@ -538,12 +607,15 @@
 			if (!moved && Math.abs(dy) >= DRAG_THRESHOLD_PX) {
 				moved = true;
 			}
-			const rawMinutes = (dy / ROW_HEIGHT_PX) * 60;
+			const rawMinutes = (dy / Math.max(1, rowHeightPx)) * 60;
 			const deltaMinutes = Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
 			previewDeltaMinutes = deltaMinutes;
 			if (!moved) return;
 
-			const nextHeight = Math.max(22, node.getBoundingClientRect().height + (deltaMinutes / 60) * ROW_HEIGHT_PX);
+			const nextHeight = Math.max(
+				22,
+				baseHeightPx + (deltaMinutes / 60) * rowHeightPx
+			);
 			node.style.height = `${nextHeight}px`;
 		});
 
@@ -649,7 +721,7 @@
 		if (dayIndex < 0 || dayIndex > 6) return;
 
 		const minutes = now.getHours() * 60 + now.getMinutes();
-		const top = (minutes / 60) * ROW_HEIGHT_PX;
+		const top = (minutes / 60) * getHourRowHeightPx();
 
 		const line = document.createElement("div");
 		line.className = "now-line";
@@ -674,8 +746,15 @@
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
 		const minutes = now.getHours() * 60 + now.getMinutes();
-		const top = (minutes / 60) * ROW_HEIGHT_PX;
+		const top = (minutes / 60) * getHourRowHeightPx();
 		el.gridBody.scrollTop = Math.max(0, top - 120);
+	}
+
+	function getHourRowHeightPx() {
+		const cell = el.gridBody.querySelector(".time-cell");
+		if (!cell) return ROW_HEIGHT_PX;
+		const h = cell.getBoundingClientRect().height;
+		return Number.isFinite(h) && h > 0 ? h : ROW_HEIGHT_PX;
 	}
 
 	function getWeekRange() {
@@ -701,6 +780,10 @@
 	}
 
 	function openCreateModal(seedDate = null) {
+		if (!apiBaseUrl) {
+			alert("API не настроен. Укажи PUBLIC_API_BASE_URL для mini app.");
+			return;
+		}
 		state.editingId = null;
 		el.modalTitle.textContent = "Новое событие";
 		el.deleteBtn.style.visibility = "hidden";
@@ -744,7 +827,10 @@
 	}
 
 	async function saveMeetingFromModal() {
-		if (!apiBaseUrl) return;
+		if (!apiBaseUrl) {
+			alert("API не настроен. Укажи PUBLIC_API_BASE_URL для mini app.");
+			return;
+		}
 
 		const payload = {
 			title: (el.eventTitle.value || "").trim(),
