@@ -374,14 +374,6 @@ body {
   background: #fff;
 }
 
-.time-cell.early-hour {
-  color: transparent;
-}
-
-.grid-cell.early-hour {
-  opacity: 0.7;
-}
-
 .event {
   position: absolute;
   left: 6px;
@@ -629,8 +621,12 @@ body {
 }
 
 /* Telegram Mini App: обычно маленькое окно и меньше вертикального места */
-.tg .app { grid-template-columns: 1fr; }
-.tg .sidebar { display: none; }
+.tg .app { grid-template-columns: 76px 1fr; }
+.tg .sidebar {
+  display: flex;
+  padding: calc(12px + var(--safe-top)) 8px calc(10px + var(--safe-bottom));
+  gap: 12px;
+}
 .tg .app {
   min-height: var(--tg-viewport-height, 100vh);
 }
@@ -657,6 +653,46 @@ body {
 }
 
 .tg .sidebar-toggle {
+  display: none;
+}
+
+.tg .logo {
+  justify-content: center;
+}
+
+.tg .logo-text {
+  display: none;
+}
+
+.tg .nav-item {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0 auto;
+  border-radius: 12px;
+  font-size: 0;
+}
+
+.tg .nav-item::before {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  color: #4b5563;
+}
+
+.tg .nav-item:nth-child(1)::before { content: "Р"; }
+.tg .nav-item:nth-child(2)::before { content: "Г"; }
+.tg .nav-item:nth-child(3)::before { content: "З"; }
+.tg .nav-item:nth-child(4)::before { content: "С"; }
+
+.tg .nav-item.active::before {
+  color: var(--accent);
+}
+
+.tg .sidebar-footer {
   display: none;
 }
 

@@ -257,20 +257,12 @@
 		for (let hour = 0; hour < 24; hour++) {
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
-			if (hour < 7) {
-				timeCell.classList.add("early-hour");
-				timeCell.textContent = "";
-			} else {
-				timeCell.textContent = `${pad2(hour)}:00`;
-			}
+			timeCell.textContent = `${pad2(hour)}:00`;
 			el.gridBody.appendChild(timeCell);
 
 			for (let d = 0; d < 7; d++) {
 				const cell = document.createElement("div");
 				cell.className = "grid-cell";
-				if (hour < 7) {
-					cell.classList.add("early-hour");
-				}
 				if (todayIndex === d) {
 					cell.classList.add("today");
 				}
@@ -295,7 +287,7 @@
 		el.gridBody.appendChild(nowLayer);
 
 		updateNowLine();
-		scrollToPreferredHour();
+		scrollToNowIfVisible();
 	}
 
 	function renderMonthGrid() {
@@ -752,15 +744,13 @@
 		nowLayer.appendChild(line);
 	}
 
-	function scrollToPreferredHour() {
+	function scrollToNowIfVisible() {
 		if (state.view !== "week") return;
 		const now = new Date();
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
-		let minutes = 7 * 60;
-		if (now >= weekStart && now < weekEnd && now.getHours() >= 7) {
-			minutes = now.getHours() * 60 + now.getMinutes();
-		}
+		if (now < weekStart || now >= weekEnd) return;
+		const minutes = now.getHours() * 60 + now.getMinutes();
 		const top = (minutes / 60) * getHourRowHeightPx();
 		el.gridBody.scrollTop = Math.max(0, top - 120);
 	}
