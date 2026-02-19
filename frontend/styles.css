@@ -13,6 +13,7 @@
   --font: "Manrope", system-ui, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --hour-row: 28px;
 }
 
 * { box-sizing: border-box; }
@@ -235,12 +236,13 @@ body {
 .grid-body {
   display: grid;
   grid-template-columns: var(--time-col) repeat(7, 1fr);
-  grid-template-rows: repeat(24, 38px);
+  grid-template-rows: repeat(24, var(--hour-row));
   border-top: 0;
   border-left: 0;
   max-height: 72vh;
   overflow: auto;
   background: #fff;
+  align-content: start;
 }
 
 @supports (height: 100dvh) {
@@ -258,6 +260,7 @@ body {
   grid-template-rows: repeat(6, 130px);
   max-height: 72vh;
   overflow: auto;
+  align-content: start;
 }
 
 @supports (height: 100dvh) {
@@ -285,7 +288,8 @@ body {
   position: relative;
   background: transparent;
   overflow: hidden;
-  z-index: 5;
+  z-index: 3;
+  background: transparent;
 }
 
 .now-layer {
@@ -294,8 +298,9 @@ body {
   padding: 0;
   position: relative;
   background: transparent;
-  z-index: 6;
+  z-index: 4;
   pointer-events: none;
+  background: transparent;
 }
 
 .now-overlay {
@@ -390,6 +395,7 @@ body {
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
   transition: transform 0.05s linear;
   touch-action: none;
+  z-index: 6;
 }
 
 .event.drag-ready {
@@ -698,6 +704,7 @@ body {
 }
 
 @media (max-width: 720px) {
+  :root { --hour-row: 26px; }
   .main { padding: 16px; }
   .title { font-size: 22px; }
   .topbar { gap: 12px; }
@@ -705,7 +712,7 @@ body {
   .ghost { padding: 8px 12px; }
   .calendar-header { flex-wrap: wrap; gap: 10px; }
   .pill { padding: 6px 10px; }
-  .grid-body { grid-template-rows: repeat(24, 36px); }
+  .grid-body { grid-template-rows: repeat(24, var(--hour-row)); }
   .grid.month-mode .grid-body { grid-template-rows: repeat(6, 120px); }
   .time-cell { padding-right: 8px; }
   .event { font-size: 12px; padding: 6px 7px; }
@@ -756,7 +763,7 @@ body {
 }
 
 @media (max-width: 420px) {
-  :root { --time-col: 46px; }
+  :root { --time-col: 46px; --hour-row: 24px; }
   .main { padding: 12px; }
   .title { font-size: 20px; }
   .clock { font-size: 16px; }
@@ -771,7 +778,7 @@ body {
   .day-num { font-size: 14px; }
   .day-dow { font-size: 11px; }
   .grid-body {
-    grid-template-rows: repeat(24, 34px);
+    grid-template-rows: repeat(24, var(--hour-row));
     grid-template-columns: var(--time-col) repeat(7, minmax(90px, 1fr));
   }
   .grid.month-mode .grid-body {
