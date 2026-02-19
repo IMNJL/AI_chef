@@ -234,7 +234,7 @@ body {
 .grid-body {
   display: grid;
   grid-template-columns: var(--time-col) repeat(7, 1fr);
-  grid-template-rows: repeat(24, 48px);
+  grid-template-rows: repeat(17, 48px);
   border-top: 0;
   border-left: 0;
   max-height: 72vh;
@@ -621,7 +621,8 @@ body {
 }
 
 /* Telegram Mini App: обычно маленькое окно и меньше вертикального места */
-.tg .app { grid-template-columns: 76px 1fr; }
+.tg .app { grid-template-columns: 260px 1fr; }
+.tg .app.sidebar-collapsed { grid-template-columns: 76px 1fr; }
 .tg .sidebar {
   display: flex;
   padding: calc(12px + var(--safe-top)) 8px calc(10px + var(--safe-bottom));
@@ -648,63 +649,24 @@ body {
 
 /* Компактная шапка, чтобы не залезать под Dynamic Island и кнопку закрытия */
 .tg .topbar {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
 }
 
 .tg .sidebar-toggle {
-  display: none;
-}
-
-.tg .logo {
-  justify-content: center;
-}
-
-.tg .logo-text {
-  display: none;
-}
-
-.tg .nav-item {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  margin: 0 auto;
-  border-radius: 12px;
-  font-size: 0;
-}
-
-.tg .nav-item::before {
-  position: absolute;
-  inset: 0;
-  display: grid;
+  display: inline-grid;
   place-items: center;
-  font-size: 18px;
-  color: #4b5563;
-}
-
-.tg .nav-item:nth-child(1)::before { content: "Р"; }
-.tg .nav-item:nth-child(2)::before { content: "Г"; }
-.tg .nav-item:nth-child(3)::before { content: "З"; }
-.tg .nav-item:nth-child(4)::before { content: "С"; }
-
-.tg .nav-item.active::before {
-  color: var(--accent);
-}
-
-.tg .sidebar-footer {
-  display: none;
 }
 
 .tg .title {
   font-size: 20px;
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
 }
 
 .tg .clock {
   font-size: 16px;
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   justify-self: end;
 }
@@ -742,7 +704,7 @@ body {
   .ghost { padding: 8px 12px; }
   .calendar-header { flex-wrap: wrap; gap: 10px; }
   .pill { padding: 6px 10px; }
-  .grid-body { grid-template-rows: repeat(24, 44px); }
+  .grid-body { grid-template-rows: repeat(17, 44px); }
   .grid.month-mode .grid-body { grid-template-rows: repeat(6, 120px); }
   .time-cell { padding-right: 8px; }
   .event { font-size: 12px; padding: 6px 7px; }
@@ -779,10 +741,10 @@ body {
   color: #4b5563;
 }
 
-.app.sidebar-collapsed .nav-item:nth-child(1)::before { content: "Р"; }
-.app.sidebar-collapsed .nav-item:nth-child(2)::before { content: "Г"; }
-.app.sidebar-collapsed .nav-item:nth-child(3)::before { content: "З"; }
-.app.sidebar-collapsed .nav-item:nth-child(4)::before { content: "С"; }
+.app.sidebar-collapsed .nav-item:nth-child(1)::before { content: "📅"; }
+.app.sidebar-collapsed .nav-item:nth-child(2)::before { content: "🏠"; }
+.app.sidebar-collapsed .nav-item:nth-child(3)::before { content: "📝"; }
+.app.sidebar-collapsed .nav-item:nth-child(4)::before { content: "⚙️"; }
 
 .app.sidebar-collapsed .nav-item.active::before {
   color: var(--accent);
@@ -808,7 +770,7 @@ body {
   .day-num { font-size: 14px; }
   .day-dow { font-size: 11px; }
   .grid-body {
-    grid-template-rows: repeat(24, 42px);
+    grid-template-rows: repeat(17, 42px);
     grid-template-columns: var(--time-col) repeat(7, minmax(90px, 1fr));
   }
   .grid.month-mode .grid-body {

@@ -1,6 +1,11 @@
 (() => {
 	const ROW_HEIGHT_PX = 48;
 	const DAY_MINUTES = 24 * 60;
+	const VISIBLE_START_HOUR = 7;
+	const VISIBLE_END_HOUR = 24;
+	const VISIBLE_START_MINUTE = VISIBLE_START_HOUR * 60;
+	const VISIBLE_END_MINUTE = VISIBLE_END_HOUR * 60;
+	const VISIBLE_HOURS_COUNT = VISIBLE_END_HOUR - VISIBLE_START_HOUR;
 	const DRAG_SNAP_MINUTES = 15;
 	const DRAG_THRESHOLD_PX = 6;
 
@@ -254,7 +259,7 @@
 		}
 
 		el.gridBody.innerHTML = "";
-		for (let hour = 0; hour < 24; hour++) {
+		for (let hour = VISIBLE_START_HOUR; hour < VISIBLE_END_HOUR; hour++) {
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
 			timeCell.textContent = `${pad2(hour)}:00`;
@@ -274,14 +279,14 @@
 			const layer = document.createElement("div");
 			layer.className = "day-layer";
 			layer.dataset.dayIndex = String(d);
-			layer.style.gridRow = "1 / span 24";
+			layer.style.gridRow = `1 / span ${VISIBLE_HOURS_COUNT}`;
 			layer.style.gridColumn = String(2 + d);
 			el.gridBody.appendChild(layer);
 		}
 
 		const nowLayer = document.createElement("div");
 		nowLayer.className = "now-layer";
-		nowLayer.style.gridRow = "1 / span 24";
+		nowLayer.style.gridRow = `1 / span ${VISIBLE_HOURS_COUNT}`;
 		nowLayer.style.gridColumn = "2 / span 7";
 		nowLayer.id = "nowLayer";
 		el.gridBody.appendChild(nowLayer);
@@ -451,8 +456,9 @@
 				const s = clampDate(startDt, dayStart, dayEnd);
 				const e = clampDate(endDt, dayStart, dayEnd);
 				if (e <= dayStart || s >= dayEnd) continue;
-				const startMin = Math.max(0, minutesFromDayStart(s, dayStart));
-				const endMin = Math.min(DAY_MINUTES, minutesFromDayStart(e, dayStart));
+				const startMin = Math.max(VISIBLE_START_MINUTE, minutesFromDayStart(s, dayStart));
+				const endMin = Math.min(VISIBLE_END_MINUTE, minutesFromDayStart(e, dayStart));
+				if (endMin <= startMin) continue;
 				dayBuckets[d].push({
 					id: m.id,
 					title: m.title || "(без названия)",
@@ -496,7 +502,7 @@
 		}
 
 		for (const ev of assigned) {
-			const top = (ev.startMin / 60) * rowHeightPx;
+			const top = ((ev.startMin - VISIBLE_START_MINUTE) / 60) * rowHeightPx;
 			const height = Math.max(
 				22,
 				((Math.max(ev.endMin, ev.startMin + 10) - ev.startMin) / 60) * rowHeightPx
@@ -721,12 +727,13 @@
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
+		if (now.getHours() < VISIBLE_START_HOUR || now.getHours() >= VISIBLE_END_HOUR) return;
 
 		const dayIndex = Math.floor((startOfDay(now).getTime() - weekStart.getTime()) / 86400000);
 		if (dayIndex < 0 || dayIndex > 6) return;
 
 		const minutes = now.getHours() * 60 + now.getMinutes();
-		const top = (minutes / 60) * getHourRowHeightPx();
+		const top = ((minutes - VISIBLE_START_MINUTE) / 60) * getHourRowHeightPx();
 
 		const line = document.createElement("div");
 		line.className = "now-line";
@@ -750,8 +757,13 @@
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
-		const minutes = now.getHours() * 60 + now.getMinutes();
-		const top = (minutes / 60) * getHourRowHeightPx();
+		const hours = now.getHours();
+		if (hours < VISIBLE_START_HOUR) {
+			el.gridBody.scrollTop = 0;
+			return;
+		}
+		const minutes = Math.min(VISIBLE_END_MINUTE - 1, hours * 60 + now.getMinutes());
+		const top = ((minutes - VISIBLE_START_MINUTE) / 60) * getHourRowHeightPx();
 		el.gridBody.scrollTop = Math.max(0, top - 120);
 	}
 
@@ -966,10 +978,16 @@
 		const app = document.querySelector(".app");
 		if (!app) return;
 		let collapsed = false;
+		let hasStoredValue = false;
 		try {
-			collapsed = localStorage.getItem("miniapp_sidebar_collapsed") === "1";
+			const stored = localStorage.getItem("miniapp_sidebar_collapsed");
+			hasStoredValue = stored === "0" || stored === "1";
+			collapsed = stored === "1";
 		} catch {
 			// ignore
+		}
+		if (!hasStoredValue && tg) {
+			collapsed = true;
 		}
 		if (collapsed) {
 			app.classList.add("sidebar-collapsed");
