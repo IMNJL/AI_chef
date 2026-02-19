@@ -1,11 +1,12 @@
 (() => {
 	const ROW_HEIGHT_PX = 48;
 	const DAY_MINUTES = 24 * 60;
-	const VISIBLE_START_HOUR = 0;
-	const VISIBLE_END_HOUR = 24;
-	const VISIBLE_START_MINUTE = VISIBLE_START_HOUR * 60;
-	const VISIBLE_END_MINUTE = VISIBLE_END_HOUR * 60;
-	const VISIBLE_HOURS_COUNT = VISIBLE_END_HOUR - VISIBLE_START_HOUR;
+	const MIN_HOUR = 0;
+	const MAX_HOUR = 24;
+	const DEFAULT_START_HOUR = 8;
+	const DEFAULT_END_HOUR = 22;
+	const MIN_VISIBLE_SPAN_HOURS = 8;
+	const MAX_VISIBLE_SPAN_HOURS = 16;
 	const DRAG_SNAP_MINUTES = 15;
 	const DRAG_THRESHOLD_PX = 6;
 
@@ -82,6 +83,8 @@
 		view: "week",
 		weekStart: startOfWeek(new Date()),
 		monthStart: startOfMonth(new Date()),
+		visibleStartHour: DEFAULT_START_HOUR,
+		visibleEndHour: DEFAULT_END_HOUR,
 		meetings: [],
 		editingId: null,
 		nowTimer: null,
@@ -218,9 +221,12 @@
 	async function render() {
 		if (state.view === "week") {
 			el.grid.classList.remove("month-mode");
-			renderWeekGrid();
 			const range = getWeekRange();
 			await loadMeetings(range.from, range.to);
+			const bounds = resolveVisibleHourBounds();
+			state.visibleStartHour = bounds.startHour;
+			state.visibleEndHour = bounds.endHour;
+			renderWeekGrid();
 			renderWeekEvents();
 		} else {
 			el.grid.classList.add("month-mode");
@@ -259,7 +265,9 @@
 		}
 
 		el.gridBody.innerHTML = "";
-		for (let hour = VISIBLE_START_HOUR; hour < VISIBLE_END_HOUR; hour++) {
+		const visibleHoursCount = Math.max(1, state.visibleEndHour - state.visibleStartHour);
+		el.gridBody.style.gridTemplateRows = `repeat(${visibleHoursCount}, var(--hour-row))`;
+		for (let hour = state.visibleStartHour; hour < state.visibleEndHour; hour++) {
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
 			timeCell.textContent = `${pad2(hour)}:00`;
@@ -279,14 +287,14 @@
 			const layer = document.createElement("div");
 			layer.className = "day-layer";
 			layer.dataset.dayIndex = String(d);
-			layer.style.gridRow = `1 / span ${VISIBLE_HOURS_COUNT}`;
+			layer.style.gridRow = `1 / span ${visibleHoursCount}`;
 			layer.style.gridColumn = String(2 + d);
 			el.gridBody.appendChild(layer);
 		}
 
 		const nowLayer = document.createElement("div");
 		nowLayer.className = "now-layer";
-		nowLayer.style.gridRow = `1 / span ${VISIBLE_HOURS_COUNT}`;
+		nowLayer.style.gridRow = `1 / span ${visibleHoursCount}`;
 		nowLayer.style.gridColumn = "2 / span 7";
 		nowLayer.id = "nowLayer";
 		el.gridBody.appendChild(nowLayer);
@@ -446,6 +454,8 @@
 		const start = startOfDay(state.weekStart);
 		const dayBuckets = new Array(7).fill(0).map(() => []);
 
+		const visibleStartMinute = state.visibleStartHour * 60;
+		const visibleEndMinute = state.visibleEndHour * 60;
 		for (const m of state.meetings) {
 			const startDt = new Date(m.startsAt);
 			const endDt = new Date(m.endsAt);
@@ -456,8 +466,8 @@
 				const s = clampDate(startDt, dayStart, dayEnd);
 				const e = clampDate(endDt, dayStart, dayEnd);
 				if (e <= dayStart || s >= dayEnd) continue;
-				const startMin = Math.max(VISIBLE_START_MINUTE, minutesFromDayStart(s, dayStart));
-				const endMin = Math.min(VISIBLE_END_MINUTE, minutesFromDayStart(e, dayStart));
+				const startMin = Math.max(visibleStartMinute, minutesFromDayStart(s, dayStart));
+				const endMin = Math.min(visibleEndMinute, minutesFromDayStart(e, dayStart));
 				if (endMin <= startMin) continue;
 				dayBuckets[d].push({
 					id: m.id,
@@ -502,7 +512,7 @@
 		}
 
 		for (const ev of assigned) {
-			const top = ((ev.startMin - VISIBLE_START_MINUTE) / 60) * rowHeightPx;
+			const top = ((ev.startMin - state.visibleStartHour * 60) / 60) * rowHeightPx;
 			const height = Math.max(
 				22,
 				((Math.max(ev.endMin, ev.startMin + 10) - ev.startMin) / 60) * rowHeightPx
@@ -727,13 +737,13 @@
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
-		if (now.getHours() < VISIBLE_START_HOUR || now.getHours() >= VISIBLE_END_HOUR) return;
+		if (now.getHours() < state.visibleStartHour || now.getHours() >= state.visibleEndHour) return;
 
 		const dayIndex = Math.floor((startOfDay(now).getTime() - weekStart.getTime()) / 86400000);
 		if (dayIndex < 0 || dayIndex > 6) return;
 
 		const minutes = now.getHours() * 60 + now.getMinutes();
-		const top = ((minutes - VISIBLE_START_MINUTE) / 60) * getHourRowHeightPx();
+		const top = ((minutes - state.visibleStartHour * 60) / 60) * getHourRowHeightPx();
 
 		const line = document.createElement("div");
 		line.className = "now-line";
@@ -758,13 +768,58 @@
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
 		const hours = now.getHours();
-		if (hours < VISIBLE_START_HOUR) {
+		if (hours < state.visibleStartHour) {
 			el.gridBody.scrollTop = 0;
 			return;
 		}
-		const minutes = Math.min(VISIBLE_END_MINUTE - 1, hours * 60 + now.getMinutes());
-		const top = ((minutes - VISIBLE_START_MINUTE) / 60) * getHourRowHeightPx();
+		const visibleEndMinute = state.visibleEndHour * 60;
+		const minutes = Math.min(visibleEndMinute - 1, hours * 60 + now.getMinutes());
+		const top = ((minutes - state.visibleStartHour * 60) / 60) * getHourRowHeightPx();
 		el.gridBody.scrollTop = Math.max(0, top - 120);
+	}
+
+	function resolveVisibleHourBounds() {
+		let minHour = Number.POSITIVE_INFINITY;
+		let maxHour = Number.NEGATIVE_INFINITY;
+
+		for (const meeting of state.meetings) {
+			const start = new Date(meeting.startsAt);
+			const end = new Date(meeting.endsAt);
+			if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+			minHour = Math.min(minHour, start.getHours());
+			const endHour = Math.ceil((end.getHours() * 60 + end.getMinutes()) / 60);
+			maxHour = Math.max(maxHour, endHour);
+		}
+
+		const now = new Date();
+		const weekStart = startOfDay(state.weekStart);
+		const weekEnd = addDays(weekStart, 7);
+		if (now >= weekStart && now < weekEnd) {
+			minHour = Math.min(minHour, now.getHours());
+			maxHour = Math.max(maxHour, now.getHours() + 1);
+		}
+
+		if (!Number.isFinite(minHour) || !Number.isFinite(maxHour)) {
+			return { startHour: DEFAULT_START_HOUR, endHour: DEFAULT_END_HOUR };
+		}
+
+		let startHour = Math.max(MIN_HOUR, Math.floor(minHour) - 1);
+		let endHour = Math.min(MAX_HOUR, Math.ceil(maxHour) + 1);
+
+		if (endHour - startHour < MIN_VISIBLE_SPAN_HOURS) {
+			endHour = Math.min(MAX_HOUR, startHour + MIN_VISIBLE_SPAN_HOURS);
+		}
+
+		if (endHour - startHour > MAX_VISIBLE_SPAN_HOURS) {
+			endHour = startHour + MAX_VISIBLE_SPAN_HOURS;
+		}
+
+		if (endHour > MAX_HOUR) {
+			endHour = MAX_HOUR;
+			startHour = Math.max(MIN_HOUR, endHour - MAX_VISIBLE_SPAN_HOURS);
+		}
+
+		return { startHour, endHour };
 	}
 
 	function getHourRowHeightPx() {
