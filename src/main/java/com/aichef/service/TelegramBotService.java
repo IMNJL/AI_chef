@@ -58,6 +58,8 @@ import java.util.regex.Pattern;
 public class TelegramBotService {
     private static final ZoneId DEFAULT_ZONE = ZoneId.of("Europe/Moscow");
 
+    private static final int TELEGRAM_MESSAGE_MAX_CHARS = 4000;
+
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{2,4}))?");
     private static final Pattern DATE_TEXT_PATTERN = Pattern.compile(
             "\\b(\\d{1,2})\\s+(январ[яе]|феврал[яе]|март[а]?|апрел[яе]|ма[йя]|июн[яе]|июл[яе]|август[а]?|сентябр[яе]|октябр[яе]|ноябр[яе]|декабр[яе])(?:\\s+(\\d{4}))?\\b");
@@ -279,21 +281,27 @@ public class TelegramBotService {
     }
 
     private void sendMessage(Long chatId, String text, Map<String, Object> replyMarkup) {
-        log.info("Send Telegram message. chatId={}, text={}", chatId, text);
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("chat_id", chatId);
-        payload.put("text", text);
-        if (replyMarkup != null) {
-            payload.put("reply_markup", replyMarkup);
-        }
+        String safeText = text == null ? "" : text;
+        List<String> parts = splitTelegramText(safeText, TELEGRAM_MESSAGE_MAX_CHARS);
+        log.info("Send Telegram message. chatId={}, textLength={}, parts={}", chatId, safeText.length(), parts.size());
 
         try {
-            telegramRestClient.post()
-                    .uri("/bot{token}/sendMessage", properties.botToken())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
-                    .retrieve()
-                    .toBodilessEntity();
+            for (int i = 0; i < parts.size(); i++) {
+                String part = parts.get(i);
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("chat_id", chatId);
+                payload.put("text", part);
+                if (i == parts.size() - 1 && replyMarkup != null) {
+                    payload.put("reply_markup", replyMarkup);
+                }
+
+                telegramRestClient.post()
+                        .uri("/bot{token}/sendMessage", properties.botToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payload)
+                        .retrieve()
+                        .toBodilessEntity();
+            }
             log.info("Telegram message sent. chatId={}", chatId);
         } catch (RestClientException e) {
             log.error("Failed to send Telegram message. chatId={}, error={}", chatId, e.getMessage(), e);
@@ -302,30 +310,106 @@ public class TelegramBotService {
     }
 
     private Long sendMessageAndGetId(Long chatId, String text, Map<String, Object> replyMarkup) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("chat_id", chatId);
-        payload.put("text", text);
-        if (replyMarkup != null) {
-            payload.put("reply_markup", replyMarkup);
-        }
+        String safeText = text == null ? "" : text;
+        List<String> parts = splitTelegramText(safeText, TELEGRAM_MESSAGE_MAX_CHARS);
         try {
-            Map<?, ?> response = telegramRestClient.post()
-                    .uri("/bot{token}/sendMessage", properties.botToken())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
-                    .retrieve()
-                    .body(Map.class);
-            Object result = response == null ? null : response.get("result");
-            if (result instanceof Map<?, ?> resultMap) {
-                Object messageId = resultMap.get("message_id");
-                if (messageId instanceof Number n) {
-                    return n.longValue();
+            Long lastMessageId = null;
+            for (int i = 0; i < parts.size(); i++) {
+                String part = parts.get(i);
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("chat_id", chatId);
+                payload.put("text", part);
+                if (i == parts.size() - 1 && replyMarkup != null) {
+                    payload.put("reply_markup", replyMarkup);
+                }
+
+                Map<?, ?> response = telegramRestClient.post()
+                        .uri("/bot{token}/sendMessage", properties.botToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payload)
+                        .retrieve()
+                        .body(Map.class);
+                Object result = response == null ? null : response.get("result");
+                if (result instanceof Map<?, ?> resultMap) {
+                    Object messageId = resultMap.get("message_id");
+                    if (messageId instanceof Number n) {
+                        lastMessageId = n.longValue();
+                    }
                 }
             }
+            return lastMessageId;
         } catch (RestClientException e) {
             log.error("Failed to send Telegram message (id). chatId={}, error={}", chatId, e.getMessage(), e);
         }
         return null;
+    }
+
+    private static List<String> splitTelegramText(String text, int maxChars) {
+        if (text == null) {
+            return List.of("");
+        }
+        if (maxChars <= 0 || text.length() <= maxChars) {
+            return List.of(text);
+        }
+
+        List<String> parts = new ArrayList<>();
+        int index = 0;
+        while (index < text.length()) {
+            int end = Math.min(text.length(), index + maxChars);
+            end = adjustEndForSurrogatePair(text, index, end);
+            int split = findBestSplitIndex(text, index, end);
+            if (split <= index) {
+                split = end;
+            }
+            if (split <= index) {
+                split = Math.min(text.length(), index + 1);
+            }
+            parts.add(text.substring(index, split));
+            index = split;
+        }
+
+        return parts;
+    }
+
+    private static int adjustEndForSurrogatePair(String text, int start, int endExclusive) {
+        if (endExclusive <= start) {
+            return endExclusive;
+        }
+        if (endExclusive >= text.length()) {
+            return endExclusive;
+        }
+        char last = text.charAt(endExclusive - 1);
+        char next = text.charAt(endExclusive);
+        if (Character.isHighSurrogate(last) && Character.isLowSurrogate(next)) {
+            return endExclusive - 1;
+        }
+        return endExclusive;
+    }
+
+    private static int findBestSplitIndex(String text, int start, int endExclusive) {
+        int length = endExclusive - start;
+        if (length <= 0) {
+            return start;
+        }
+
+        int minGoodSplit = start + Math.max(200, (int) (length * 0.6));
+
+        int newline = text.lastIndexOf('\n', endExclusive - 1);
+        if (newline >= minGoodSplit) {
+            return newline + 1;
+        }
+
+        int space = text.lastIndexOf(' ', endExclusive - 1);
+        if (space >= minGoodSplit) {
+            return space + 1;
+        }
+
+        int tab = text.lastIndexOf('\t', endExclusive - 1);
+        if (tab >= minGoodSplit) {
+            return tab + 1;
+        }
+
+        return endExclusive;
     }
 
     public void registerWebhook(String webhookUrl) {

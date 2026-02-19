@@ -193,12 +193,55 @@ body {
   border-left: 1px solid var(--line);
 }
 
-.grid-body > div {
+.grid-body > .grid-cell {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   padding: 6px;
   position: relative;
   background: #fff;
+}
+
+.day-layer {
+  border-right: 0;
+  border-bottom: 0;
+  padding: 0;
+  position: relative;
+  background: transparent;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.now-layer {
+  border-right: 0;
+  border-bottom: 0;
+  padding: 0;
+  position: relative;
+  background: transparent;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.head-cell {
+  padding: 6px;
+}
+
+.head-day {
+  display: grid;
+  gap: 2px;
+}
+
+.head-day .dow {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.head-day .date {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.head-day.today .dow {
+  color: var(--accent);
 }
 
 .time-cell {
@@ -209,14 +252,48 @@ body {
 .event {
   position: absolute;
   left: 6px;
-  right: 6px;
-  top: 4px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text);
+  border-left: 3px solid var(--accent);
   border-radius: 10px;
   padding: 6px 8px;
   font-size: 12px;
   cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.event .event-title {
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.event .event-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.now-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  top: -3px;
+  left: -4px;
 }
 
 .modal {
