@@ -1,8 +1,10 @@
 (() => {
 	const ROW_HEIGHT_PX = 48;
 	const DAY_MINUTES = 24 * 60;
+	const DRAG_SNAP_MINUTES = 15;
+	const DRAG_THRESHOLD_PX = 6;
 
-	const config = (window.__APP_CONFIG__ || {});
+	const config = window.__APP_CONFIG__ || {};
 	const apiBaseUrl = (config.apiBaseUrl || "").replace(/\/+$/, "");
 
 	const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -11,6 +13,7 @@
 	}
 
 	const el = {
+		grid: document.getElementById("calendarGrid"),
 		gridHead: document.getElementById("gridHead"),
 		gridBody: document.getElementById("gridBody"),
 		rangeLabel: document.getElementById("rangeLabel"),
@@ -39,9 +42,11 @@
 	const state = {
 		view: "week",
 		weekStart: startOfWeek(new Date()),
+		monthStart: startOfMonth(new Date()),
 		meetings: [],
 		editingId: null,
-		nowTimer: null
+		nowTimer: null,
+		dragSuppressClickUntil: 0
 	};
 
 	init();
@@ -50,14 +55,14 @@
 		hydrateUser();
 		bindUi();
 		render();
-		scheduleNowLine();
+		scheduleNowClockAndLine();
 	}
 
 	function hydrateUser() {
 		try {
 			if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
 				const u = tg.initDataUnsafe.user;
-				el.userName.textContent = (u.first_name || u.username || "Вы");
+				el.userName.textContent = u.first_name || u.username || "Вы";
 				el.userId.textContent = u.id ? `id ${u.id}` : "";
 			} else {
 				const telegramId = getTelegramIdFromUrl();
@@ -71,20 +76,34 @@
 
 	function bindUi() {
 		el.prevBtn.addEventListener("click", () => {
-			state.weekStart = addDays(state.weekStart, -7);
+			if (state.view === "week") {
+				state.weekStart = addDays(state.weekStart, -7);
+			} else {
+				state.monthStart = addMonths(state.monthStart, -1);
+			}
 			render();
 		});
+
 		el.nextBtn.addEventListener("click", () => {
-			state.weekStart = addDays(state.weekStart, 7);
+			if (state.view === "week") {
+				state.weekStart = addDays(state.weekStart, 7);
+			} else {
+				state.monthStart = addMonths(state.monthStart, 1);
+			}
 			render();
 		});
+
 		el.todayBtn.addEventListener("click", () => {
-			state.weekStart = startOfWeek(new Date());
+			const now = new Date();
+			state.weekStart = startOfWeek(now);
+			state.monthStart = startOfMonth(now);
 			render();
 		});
+
 		el.reloadBtn.addEventListener("click", () => {
-			loadMeetings().then(renderWeekEvents);
+			render();
 		});
+
 		el.newBtn.addEventListener("click", () => {
 			openCreateModal();
 		});
@@ -92,8 +111,13 @@
 		el.pills.forEach((pill) => {
 			pill.addEventListener("click", () => {
 				const view = pill.getAttribute("data-view");
-				if (!view) return;
+				if (!view || view === state.view) return;
 				state.view = view;
+				if (view === "month") {
+					state.monthStart = startOfMonth(state.weekStart);
+				} else {
+					state.weekStart = startOfWeek(state.monthStart);
+				}
 				el.pills.forEach((p) => p.classList.toggle("active", p === pill));
 				render();
 			});
@@ -107,18 +131,26 @@
 		el.saveBtn.addEventListener("click", async () => {
 			await saveMeetingFromModal();
 		});
+
 		el.deleteBtn.addEventListener("click", async () => {
 			await deleteMeetingFromModal();
 		});
 	}
 
-	function render() {
-		if (state.view !== "week") {
-			state.view = "week";
-			el.pills.forEach((p) => p.classList.toggle("active", p.getAttribute("data-view") === "week"));
+	async function render() {
+		if (state.view === "week") {
+			el.grid.classList.remove("month-mode");
+			renderWeekGrid();
+			const range = getWeekRange();
+			await loadMeetings(range.from, range.to);
+			renderWeekEvents();
+		} else {
+			el.grid.classList.add("month-mode");
+			renderMonthGrid();
+			const range = getMonthRange();
+			await loadMeetings(range.from, range.to);
+			renderMonthEvents();
 		}
-		renderWeekGrid();
-		loadMeetings().then(renderWeekEvents);
 	}
 
 	function renderWeekGrid() {
@@ -127,13 +159,13 @@
 		el.rangeLabel.textContent = formatRange(start, end);
 
 		const today = startOfDay(new Date());
-		const todayIndex = sameDayRangeIndex(startOfDay(start), today);
+		const todayIndex = sameDayRangeIndex(start, today);
 
-		// Head
 		el.gridHead.innerHTML = "";
 		const headBlank = document.createElement("div");
 		headBlank.className = "head-cell";
 		el.gridHead.appendChild(headBlank);
+
 		for (let d = 0; d < 7; d++) {
 			const day = addDays(start, d);
 			const cell = document.createElement("div");
@@ -143,22 +175,18 @@
 			}
 			const inner = document.createElement("div");
 			inner.className = "head-day";
-			if (sameDay(day, today)) inner.classList.add("today");
-			inner.innerHTML = `
-				<div class="head-main"><span class="day-num">${day.getDate()}</span><span class="day-dow">, ${formatDow(day)}</span></div>
-			`;
+			inner.innerHTML = `<div class="head-main"><span class="day-num">${day.getDate()}</span><span class="day-dow">, ${formatDow(day)}</span></div>`;
 			cell.appendChild(inner);
 			el.gridHead.appendChild(cell);
 		}
 
-		// Body background cells
 		el.gridBody.innerHTML = "";
 		for (let hour = 0; hour < 24; hour++) {
-			// time label
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
 			timeCell.textContent = `${pad2(hour)}:00`;
 			el.gridBody.appendChild(timeCell);
+
 			for (let d = 0; d < 7; d++) {
 				const cell = document.createElement("div");
 				cell.className = "grid-cell";
@@ -169,21 +197,19 @@
 			}
 		}
 
-		// Day overlay layers (for events)
 		for (let d = 0; d < 7; d++) {
 			const layer = document.createElement("div");
 			layer.className = "day-layer";
 			layer.dataset.dayIndex = String(d);
-			layer.style.gridRow = `1 / span 24`;
+			layer.style.gridRow = "1 / span 24";
 			layer.style.gridColumn = String(2 + d);
 			el.gridBody.appendChild(layer);
 		}
 
-		// Now line layer
 		const nowLayer = document.createElement("div");
 		nowLayer.className = "now-layer";
-		nowLayer.style.gridRow = `1 / span 24`;
-		nowLayer.style.gridColumn = `2 / span 7`;
+		nowLayer.style.gridRow = "1 / span 24";
+		nowLayer.style.gridColumn = "2 / span 7";
 		nowLayer.id = "nowLayer";
 		el.gridBody.appendChild(nowLayer);
 
@@ -191,18 +217,115 @@
 		scrollToNowIfVisible();
 	}
 
-	async function loadMeetings() {
+	function renderMonthGrid() {
+		const monthStart = startOfMonth(state.monthStart);
+		el.rangeLabel.textContent = formatMonthTitle(monthStart);
+
+		el.gridHead.innerHTML = "";
+		const names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+		for (const name of names) {
+			const cell = document.createElement("div");
+			cell.className = "month-head-cell";
+			cell.textContent = name;
+			el.gridHead.appendChild(cell);
+		}
+
+		el.gridBody.innerHTML = "";
+		const start = startOfWeek(monthStart);
+		const today = startOfDay(new Date());
+
+		for (let i = 0; i < 42; i++) {
+			const day = addDays(start, i);
+			const cell = document.createElement("div");
+			cell.className = "month-cell";
+			cell.dataset.date = formatDateISO(day);
+			if (day.getMonth() !== monthStart.getMonth()) {
+				cell.classList.add("out-month");
+			}
+			if (sameDay(day, today)) {
+				cell.classList.add("today");
+			}
+
+			const dayNumber = document.createElement("div");
+			dayNumber.className = "month-day-number";
+			dayNumber.textContent = String(day.getDate());
+			cell.appendChild(dayNumber);
+
+			const list = document.createElement("div");
+			list.className = "month-events";
+			cell.appendChild(list);
+
+			cell.addEventListener("click", (e) => {
+				if (e.target instanceof HTMLElement && e.target.closest(".month-event-chip")) {
+					return;
+				}
+				openCreateModal(day);
+			});
+
+			el.gridBody.appendChild(cell);
+		}
+	}
+
+	function renderMonthEvents() {
+		const byIso = new Map();
+		Array.from(el.gridBody.querySelectorAll(".month-cell")).forEach((cell) => {
+			const key = cell.dataset.date;
+			if (!key) return;
+			byIso.set(key, cell);
+			const list = cell.querySelector(".month-events");
+			if (list) list.innerHTML = "";
+		});
+
+		const overflow = new Map();
+		for (const m of state.meetings) {
+			const start = new Date(m.startsAt);
+			const key = formatDateISO(start);
+			const cell = byIso.get(key);
+			if (!cell) continue;
+			const list = cell.querySelector(".month-events");
+			if (!list) continue;
+
+			const used = list.children.length;
+			if (used >= 3) {
+				overflow.set(key, (overflow.get(key) || 0) + 1);
+				continue;
+			}
+
+			const chip = document.createElement("button");
+			chip.type = "button";
+			chip.className = "month-event-chip";
+			chip.textContent = `${formatHm(start)} ${m.title || "(без названия)"}`;
+			chip.title = m.title || "";
+			chip.addEventListener("click", (e) => {
+				e.stopPropagation();
+				openEditModal(m);
+			});
+			list.appendChild(chip);
+		}
+
+		for (const [key, count] of overflow.entries()) {
+			const cell = byIso.get(key);
+			if (!cell) continue;
+			const list = cell.querySelector(".month-events");
+			if (!list) continue;
+			const more = document.createElement("div");
+			more.className = "month-more";
+			more.textContent = `+${count} еще`;
+			list.appendChild(more);
+		}
+	}
+
+	async function loadMeetings(from, to) {
 		if (!apiBaseUrl) {
 			el.syncStatus.textContent = "Не настроен API (config.js)";
 			state.meetings = [];
 			return [];
 		}
 
-		const from = formatDateISO(state.weekStart);
-		const to = formatDateISO(addDays(state.weekStart, 6));
 		const url = new URL(apiBaseUrl + "/api/miniapp/meetings");
 		url.searchParams.set("from", from);
 		url.searchParams.set("to", to);
+
 		const telegramId = getTelegramIdFromUrl();
 		const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
 		if (!initData && telegramId) {
@@ -215,7 +338,7 @@
 		}
 
 		try {
-			el.syncStatus.textContent = "Загрузка…";
+			el.syncStatus.textContent = "Загрузка...";
 			const res = await fetch(url.toString(), { headers });
 			if (res.status === 401) {
 				el.syncStatus.textContent = "Нет доступа (Unauthorized)";
@@ -243,7 +366,9 @@
 
 	function renderWeekEvents() {
 		const layers = Array.from(el.gridBody.querySelectorAll(".day-layer"));
-		layers.forEach((l) => (l.innerHTML = ""));
+		layers.forEach((l) => {
+			l.innerHTML = "";
+		});
 
 		const start = startOfDay(state.weekStart);
 		const dayBuckets = new Array(7).fill(0).map(() => []);
@@ -254,7 +379,7 @@
 			for (let d = 0; d < 7; d++) {
 				const day = addDays(start, d);
 				const dayStart = day;
-				const dayEnd = addMinutes(addDays(dayStart, 1), 0);
+				const dayEnd = addDays(dayStart, 1);
 				const s = clampDate(startDt, dayStart, dayEnd);
 				const e = clampDate(endDt, dayStart, dayEnd);
 				if (e <= dayStart || s >= dayEnd) continue;
@@ -276,23 +401,19 @@
 		dayBuckets.forEach((events, dayIndex) => {
 			const layer = layers.find((l) => Number(l.dataset.dayIndex) === dayIndex);
 			if (!layer) return;
-			renderDayEvents(layer, events);
+			renderDayEvents(layer, events, dayIndex);
 		});
 
 		updateNowLine();
 	}
 
-	function renderDayEvents(layer, events) {
-		const sorted = events
-			.slice()
-			.sort((a, b) => (a.startMin - b.startMin) || (a.endMin - b.endMin));
-
+	function renderDayEvents(layer, events, dayIndex) {
+		const sorted = events.slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 		const active = [];
 		const assigned = [];
 		let maxLanes = 1;
 
 		for (const ev of sorted) {
-			// cleanup
 			for (let i = active.length - 1; i >= 0; i--) {
 				if (active[i].endMin <= ev.startMin) active.splice(i, 1);
 			}
@@ -318,19 +439,200 @@
 			node.style.height = `${height - 4}px`;
 			node.style.left = `calc(${leftPercent}% + 6px)`;
 			node.style.width = `calc(${widthPercent}% - 12px)`;
-			node.innerHTML = `
-				<div class="event-title">${escapeHtml(ev.title)}</div>
-				<div class="event-meta">${formatTimeRangeFromMinutes(ev.startMin, ev.endMin)}${ev.location ? " • " + escapeHtml(ev.location) : ""}</div>
-			`;
-			node.addEventListener("click", () => openEditModal(ev));
+			node.innerHTML = `<div class="event-title">${escapeHtml(ev.title)}</div><div class="event-meta">${formatTimeRangeFromMinutes(ev.startMin, ev.endMin)}${ev.location ? " • " + escapeHtml(ev.location) : ""}</div>`;
+			const resizeHandle = document.createElement("div");
+			resizeHandle.className = "event-resize";
+			node.appendChild(resizeHandle);
+
+			node.addEventListener("click", () => {
+				if (Date.now() < state.dragSuppressClickUntil) return;
+				openEditModal(ev);
+			});
+
+			bindEventDrag(node, ev, dayIndex);
+			bindEventResize(node, resizeHandle, ev);
 			layer.appendChild(node);
 		}
 	}
 
-	function scheduleNowLine() {
+	function bindEventDrag(node, ev, dayIndex) {
+		let pointerId = null;
+		let startX = 0;
+		let startY = 0;
+		let moved = false;
+
+		node.addEventListener("pointerdown", (e) => {
+			if (e.button !== 0) return;
+			pointerId = e.pointerId;
+			startX = e.clientX;
+			startY = e.clientY;
+			moved = false;
+			node.setPointerCapture(pointerId);
+			node.classList.add("drag-ready");
+			e.preventDefault();
+		});
+
+		node.addEventListener("pointermove", (e) => {
+			if (pointerId !== e.pointerId) return;
+			const dx = e.clientX - startX;
+			const dy = e.clientY - startY;
+			if (!moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+				moved = true;
+				node.classList.add("dragging");
+			}
+			if (!moved) return;
+			node.style.transform = `translate(${dx}px, ${dy}px)`;
+		});
+
+		node.addEventListener("pointerup", async (e) => {
+			if (pointerId !== e.pointerId) return;
+			const dx = e.clientX - startX;
+			const dy = e.clientY - startY;
+			cleanupDragVisual(node);
+			pointerId = null;
+
+			if (!moved) return;
+			state.dragSuppressClickUntil = Date.now() + 350;
+
+			const dayWidth = node.parentElement ? node.parentElement.getBoundingClientRect().width : 1;
+			const deltaDays = Math.round(dx / Math.max(dayWidth, 1));
+			const rawMinutes = (dy / ROW_HEIGHT_PX) * 60;
+			const deltaMinutes = Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
+			if (deltaDays === 0 && deltaMinutes === 0) return;
+
+			await moveMeetingByDrag(ev, dayIndex, deltaDays, deltaMinutes);
+		});
+
+		node.addEventListener("pointercancel", () => {
+			cleanupDragVisual(node);
+			pointerId = null;
+		});
+	}
+
+	function cleanupDragVisual(node) {
+		node.classList.remove("drag-ready", "dragging");
+		node.style.transform = "";
+	}
+
+	function bindEventResize(node, handle, ev) {
+		let pointerId = null;
+		let startY = 0;
+		let moved = false;
+		let previewDeltaMinutes = 0;
+
+		handle.addEventListener("pointerdown", (e) => {
+			if (e.button !== 0) return;
+			pointerId = e.pointerId;
+			startY = e.clientY;
+			moved = false;
+			previewDeltaMinutes = 0;
+			handle.setPointerCapture(pointerId);
+			node.classList.add("resizing");
+			e.preventDefault();
+			e.stopPropagation();
+		});
+
+		handle.addEventListener("pointermove", (e) => {
+			if (pointerId !== e.pointerId) return;
+			const dy = e.clientY - startY;
+			if (!moved && Math.abs(dy) >= DRAG_THRESHOLD_PX) {
+				moved = true;
+			}
+			const rawMinutes = (dy / ROW_HEIGHT_PX) * 60;
+			const deltaMinutes = Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
+			previewDeltaMinutes = deltaMinutes;
+			if (!moved) return;
+
+			const nextHeight = Math.max(22, node.getBoundingClientRect().height + (deltaMinutes / 60) * ROW_HEIGHT_PX);
+			node.style.height = `${nextHeight}px`;
+		});
+
+		handle.addEventListener("pointerup", async (e) => {
+			if (pointerId !== e.pointerId) return;
+			const deltaMinutes = previewDeltaMinutes;
+			handle.releasePointerCapture(pointerId);
+			pointerId = null;
+			node.classList.remove("resizing");
+			node.style.height = "";
+
+			if (!moved || deltaMinutes === 0) return;
+			state.dragSuppressClickUntil = Date.now() + 350;
+			await resizeMeetingByHandle(ev, deltaMinutes);
+		});
+
+		handle.addEventListener("pointercancel", () => {
+			if (pointerId != null) {
+				try {
+					handle.releasePointerCapture(pointerId);
+				} catch {
+					// ignore
+				}
+			}
+			pointerId = null;
+			node.classList.remove("resizing");
+			node.style.height = "";
+		});
+	}
+
+	async function moveMeetingByDrag(ev, dayIndex, deltaDays, deltaMinutes) {
+		if (!apiBaseUrl) return;
+
+		const originalStart = new Date(ev.startsAt);
+		const originalEnd = new Date(ev.endsAt);
+		if (Number.isNaN(originalStart.getTime()) || Number.isNaN(originalEnd.getTime())) return;
+
+		const currentDayStart = addDays(startOfDay(state.weekStart), dayIndex);
+		const originalDayStart = startOfDay(originalStart);
+		const dayCorrection = Math.round((currentDayStart.getTime() - originalDayStart.getTime()) / 86400000);
+
+		const totalDayShift = dayCorrection + deltaDays;
+		const nextStart = addMinutes(addDays(originalStart, totalDayShift), deltaMinutes);
+		const nextEnd = addMinutes(addDays(originalEnd, totalDayShift), deltaMinutes);
+
+		if (nextEnd.getTime() <= nextStart.getTime()) return;
+
+		const ok = await patchMeeting(ev.id, {
+			startsAt: toOffsetIso(nextStart),
+			endsAt: toOffsetIso(nextEnd)
+		});
+		if (!ok) return;
+
+		await render();
+	}
+
+	async function resizeMeetingByHandle(ev, deltaMinutes) {
+		if (!apiBaseUrl) return;
+		const start = new Date(ev.startsAt);
+		const end = new Date(ev.endsAt);
+		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+		const minDurationMinutes = 15;
+		const currentDurationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+		const nextDurationMinutes = Math.max(minDurationMinutes, currentDurationMinutes + deltaMinutes);
+		const nextEnd = addMinutes(start, nextDurationMinutes);
+
+		const ok = await patchMeeting(ev.id, {
+			endsAt: toOffsetIso(nextEnd)
+		});
+		if (!ok) return;
+		await render();
+	}
+
+	function scheduleNowClockAndLine() {
 		if (state.nowTimer) clearInterval(state.nowTimer);
-		state.nowTimer = setInterval(updateNowLine, 60 * 1000);
-		updateNowLine();
+		state.nowTimer = setInterval(() => {
+			updateNowClock();
+			if (state.view === "week") {
+				updateNowLine();
+			}
+		}, 60 * 1000);
+		updateNowClock();
+	}
+
+	function updateNowClock() {
+		if (!el.nowClock) return;
+		const now = new Date();
+		el.nowClock.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 	}
 
 	function updateNowLine() {
@@ -339,14 +641,11 @@
 		nowLayer.innerHTML = "";
 
 		const now = new Date();
-		if (el.nowClock) {
-			el.nowClock.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-		}
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
 
-		const dayIndex = Math.floor((startOfDay(now).getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000));
+		const dayIndex = Math.floor((startOfDay(now).getTime() - weekStart.getTime()) / 86400000);
 		if (dayIndex < 0 || dayIndex > 6) return;
 
 		const minutes = now.getHours() * 60 + now.getMinutes();
@@ -357,6 +656,7 @@
 		line.style.top = `${top}px`;
 		line.style.left = `calc(${(100 / 7) * dayIndex}% )`;
 		line.style.width = `calc(${100 / 7}% )`;
+
 		const dot = document.createElement("div");
 		dot.className = "now-dot";
 		const label = document.createElement("div");
@@ -368,35 +668,50 @@
 	}
 
 	function scrollToNowIfVisible() {
+		if (state.view !== "week") return;
 		const now = new Date();
 		const weekStart = startOfDay(state.weekStart);
 		const weekEnd = addDays(weekStart, 7);
 		if (now < weekStart || now >= weekEnd) return;
-
 		const minutes = now.getHours() * 60 + now.getMinutes();
 		const top = (minutes / 60) * ROW_HEIGHT_PX;
-		// keep some top padding like in my.itmo (time not glued to the top)
 		el.gridBody.scrollTop = Math.max(0, top - 120);
+	}
+
+	function getWeekRange() {
+		return {
+			from: formatDateISO(state.weekStart),
+			to: formatDateISO(addDays(state.weekStart, 6))
+		};
+	}
+
+	function getMonthRange() {
+		const from = startOfWeek(startOfMonth(state.monthStart));
+		return {
+			from: formatDateISO(from),
+			to: formatDateISO(addDays(from, 41))
+		};
 	}
 
 	function sameDayRangeIndex(weekStartDay, day) {
 		const a = startOfDay(weekStartDay).getTime();
 		const b = startOfDay(day).getTime();
-		const diffDays = Math.floor((b - a) / (24 * 60 * 60 * 1000));
+		const diffDays = Math.floor((b - a) / 86400000);
 		return diffDays >= 0 && diffDays < 7 ? diffDays : -1;
 	}
 
-	function openCreateModal() {
+	function openCreateModal(seedDate = null) {
 		state.editingId = null;
 		el.modalTitle.textContent = "Новое событие";
 		el.deleteBtn.style.visibility = "hidden";
 
-		const start = roundToNext15(new Date());
+		const base = seedDate ? new Date(seedDate) : new Date();
+		const start = roundToNext15(base);
 		const end = addMinutes(start, 60);
 
 		el.eventTitle.value = "";
-		el.eventStart.value = toOffsetIso(start);
-		el.eventEnd.value = toOffsetIso(end);
+		el.eventStart.value = toDatetimeLocalValue(start);
+		el.eventEnd.value = toDatetimeLocalValue(end);
 		el.eventLocation.value = "";
 		el.eventLink.value = "";
 
@@ -409,8 +724,8 @@
 		el.deleteBtn.style.visibility = "visible";
 
 		el.eventTitle.value = ev.title || "";
-		el.eventStart.value = ev.startsAt || "";
-		el.eventEnd.value = ev.endsAt || "";
+		el.eventStart.value = toDatetimeLocalValue(ev.startsAt);
+		el.eventEnd.value = toDatetimeLocalValue(ev.endsAt);
 		el.eventLocation.value = ev.location || "";
 		el.eventLink.value = ev.externalLink || "";
 
@@ -420,7 +735,7 @@
 	function openModal() {
 		el.modal.classList.remove("hidden");
 		setTimeout(() => {
-			el.eventTitle && el.eventTitle.focus();
+			if (el.eventTitle) el.eventTitle.focus();
 		}, 0);
 	}
 
@@ -433,54 +748,31 @@
 
 		const payload = {
 			title: (el.eventTitle.value || "").trim(),
-			startsAt: (el.eventStart.value || "").trim() || null,
-			endsAt: (el.eventEnd.value || "").trim() || null,
+			startsAt: toOffsetIsoFromInput(el.eventStart.value),
+			endsAt: toOffsetIsoFromInput(el.eventEnd.value),
 			location: (el.eventLocation.value || "").trim() || null,
 			externalLink: (el.eventLink.value || "").trim() || null
 		};
 
 		if (!payload.title || !payload.startsAt || !payload.endsAt) {
-			alert("Заполните: Название, Начало (ISO), Конец (ISO)");
+			alert("Заполните: название, начало и конец");
+			return;
+		}
+		if (new Date(payload.endsAt).getTime() <= new Date(payload.startsAt).getTime()) {
+			alert("Время окончания должно быть позже начала");
 			return;
 		}
 
-		const telegramId = getTelegramIdFromUrl();
-		const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
-
-		const headers = { "Content-Type": "application/json" };
-		if (initData) headers["X-Telegram-Init-Data"] = initData;
-
-		try {
-			let url;
-			let method;
-			if (state.editingId) {
-				url = new URL(apiBaseUrl + `/api/miniapp/meetings/${state.editingId}`);
-				method = "PATCH";
-			} else {
-				url = new URL(apiBaseUrl + "/api/miniapp/meetings");
-				method = "POST";
-			}
-			if (!initData && telegramId) {
-				url.searchParams.set("telegramId", String(telegramId));
-			}
-
-			const res = await fetch(url.toString(), {
-				method,
-				headers,
-				body: JSON.stringify(payload)
-			});
-			if (!res.ok) {
-				const txt = await res.text().catch(() => "");
-				alert(`Ошибка сохранения: ${res.status}\n${txt}`);
-				return;
-			}
-			closeModal();
-			await loadMeetings();
-			renderWeekEvents();
-		} catch (e) {
-			console.warn(e);
-			alert("Ошибка сети при сохранении");
+		let ok;
+		if (state.editingId) {
+			ok = await patchMeeting(state.editingId, payload);
+		} else {
+			ok = await createMeeting(payload);
 		}
+		if (!ok) return;
+
+		closeModal();
+		await render();
 	}
 
 	async function deleteMeetingFromModal() {
@@ -504,15 +796,75 @@
 				return;
 			}
 			closeModal();
-			await loadMeetings();
-			renderWeekEvents();
+			await render();
 		} catch (e) {
 			console.warn(e);
 			alert("Ошибка сети при удалении");
 		}
 	}
 
-	// helpers
+	async function createMeeting(payload) {
+		const telegramId = getTelegramIdFromUrl();
+		const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
+		const headers = { "Content-Type": "application/json" };
+		if (initData) headers["X-Telegram-Init-Data"] = initData;
+
+		try {
+			const url = new URL(apiBaseUrl + "/api/miniapp/meetings");
+			if (!initData && telegramId) {
+				url.searchParams.set("telegramId", String(telegramId));
+			}
+			const res = await fetch(url.toString(), {
+				method: "POST",
+				headers,
+				body: JSON.stringify(payload)
+			});
+			if (!res.ok) {
+				const txt = await res.text().catch(() => "");
+				alert(`Ошибка сохранения: ${res.status}\n${txt}`);
+				return false;
+			}
+			return true;
+		} catch (e) {
+			console.warn(e);
+			alert("Ошибка сети при сохранении");
+			return false;
+		}
+	}
+
+	async function patchMeeting(id, payload) {
+		const telegramId = getTelegramIdFromUrl();
+		const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
+		const headers = { "Content-Type": "application/json" };
+		if (initData) headers["X-Telegram-Init-Data"] = initData;
+
+		try {
+			el.syncStatus.textContent = "Сохраняю...";
+			const url = new URL(apiBaseUrl + `/api/miniapp/meetings/${id}`);
+			if (!initData && telegramId) {
+				url.searchParams.set("telegramId", String(telegramId));
+			}
+			const res = await fetch(url.toString(), {
+				method: "PATCH",
+				headers,
+				body: JSON.stringify(payload)
+			});
+			if (!res.ok) {
+				const txt = await res.text().catch(() => "");
+				alert(`Ошибка сохранения: ${res.status}\n${txt}`);
+				el.syncStatus.textContent = `Ошибка API (${res.status})`;
+				return false;
+			}
+			el.syncStatus.textContent = "Синхронизация включена";
+			return true;
+		} catch (e) {
+			console.warn(e);
+			alert("Ошибка сети при сохранении");
+			el.syncStatus.textContent = "Ошибка сети";
+			return false;
+		}
+	}
+
 	function getTelegramIdFromUrl() {
 		try {
 			const p = new URLSearchParams(location.search);
@@ -532,15 +884,27 @@
 
 	function startOfWeek(d) {
 		const x = startOfDay(d);
-		// Monday as first day
-		const day = (x.getDay() + 6) % 7; // 0..6 where 0 is Monday
+		const day = (x.getDay() + 6) % 7;
 		return addDays(x, -day);
+	}
+
+	function startOfMonth(d) {
+		const x = startOfDay(d);
+		x.setDate(1);
+		return x;
 	}
 
 	function addDays(d, days) {
 		const x = new Date(d);
 		x.setDate(x.getDate() + days);
 		return x;
+	}
+
+	function addMonths(d, months) {
+		const x = new Date(d);
+		x.setDate(1);
+		x.setMonth(x.getMonth() + months);
+		return startOfMonth(x);
 	}
 
 	function addMinutes(d, minutes) {
@@ -555,7 +919,7 @@
 	}
 
 	function minutesFromDayStart(date, dayStart) {
-		return Math.round((date.getTime() - dayStart.getTime()) / (60 * 1000));
+		return Math.round((date.getTime() - dayStart.getTime()) / 60000);
 	}
 
 	function sameDay(a, b) {
@@ -566,30 +930,29 @@
 		const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
 		const s = `${start.getDate()} ${formatMonthShort(start)}`;
 		const e = `${end.getDate()} ${formatMonthShort(end)}`;
-		return sameMonth ? `${start.getDate()}–${end.getDate()} ${formatMonthShort(end)}` : `${s} – ${e}`;
+		return sameMonth ? `${start.getDate()}-${end.getDate()} ${formatMonthShort(end)}` : `${s} - ${e}`;
+	}
+
+	function formatMonthTitle(d) {
+		return d.toLocaleString("ru-RU", { month: "long", year: "numeric" });
 	}
 
 	function formatDow(d) {
 		const names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-		const i = (d.getDay() + 6) % 7;
-		return names[i];
+		return names[(d.getDay() + 6) % 7];
 	}
 
 	function formatMonthShort(d) {
 		return d.toLocaleString("ru-RU", { month: "short" }).replace(".", "");
 	}
 
-	function formatDayMonth(d) {
-		const m = d.toLocaleString("ru-RU", { month: "short" }).replace(".", "");
-		return `${d.getDate()} ${m}`;
-	}
-
 	function formatDateISO(d) {
 		const x = new Date(d);
-		const y = x.getFullYear();
-		const m = pad2(x.getMonth() + 1);
-		const day = pad2(x.getDate());
-		return `${y}-${m}-${day}`;
+		return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`;
+	}
+
+	function formatHm(d) {
+		return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 	}
 
 	function pad2(n) {
@@ -600,8 +963,7 @@
 		const x = new Date(d);
 		x.setSeconds(0, 0);
 		const m = x.getMinutes();
-		const next = Math.ceil(m / 15) * 15;
-		x.setMinutes(next);
+		x.setMinutes(Math.ceil(m / 15) * 15);
 		return x;
 	}
 
@@ -616,9 +978,22 @@
 		const off = -d.getTimezoneOffset();
 		const sign = off >= 0 ? "+" : "-";
 		const abs = Math.abs(off);
-		const oh = pad2(Math.floor(abs / 60));
-		const om = pad2(abs % 60);
-		return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${oh}:${om}`;
+		return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+	}
+
+	function toOffsetIsoFromInput(value) {
+		const trimmed = (value || "").trim();
+		if (!trimmed) return null;
+		const parsed = new Date(trimmed);
+		if (Number.isNaN(parsed.getTime())) return null;
+		return toOffsetIso(parsed);
+	}
+
+	function toDatetimeLocalValue(value) {
+		if (!value) return "";
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return "";
+		return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}T${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
 	}
 
 	function formatTimeRangeFromMinutes(startMin, endMin) {
@@ -626,7 +1001,7 @@
 		const sM = startMin % 60;
 		const eH = Math.floor(endMin / 60);
 		const eM = endMin % 60;
-		return `${pad2(sH)}:${pad2(sM)}–${pad2(eH)}:${pad2(eM)}`;
+		return `${pad2(sH)}:${pad2(sM)}-${pad2(eH)}:${pad2(eM)}`;
 	}
 
 	function escapeHtml(s) {

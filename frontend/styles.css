@@ -186,6 +186,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+  position: relative;
 }
 
 .grid-head {
@@ -206,6 +207,17 @@ body {
   max-height: 72vh;
   overflow: auto;
   background: #fff;
+}
+
+.grid.month-mode .grid-head {
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.grid.month-mode .grid-body {
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 130px;
+  max-height: 72vh;
+  overflow: auto;
 }
 
 .grid-body > .grid-cell {
@@ -237,6 +249,16 @@ body {
   position: relative;
   background: transparent;
   z-index: 6;
+  pointer-events: none;
+}
+
+.now-overlay {
+  position: absolute;
+  left: 60px;
+  right: 0;
+  top: 0;
+  height: 0;
+  z-index: 10;
   pointer-events: none;
 }
 
@@ -320,6 +342,23 @@ body {
   cursor: pointer;
   overflow: hidden;
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+  transition: transform 0.05s linear;
+  touch-action: none;
+}
+
+.event.drag-ready {
+  cursor: grabbing;
+}
+
+.event.dragging {
+  opacity: 0.9;
+  z-index: 30;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+}
+
+.event.resizing {
+  opacity: 0.95;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
 }
 
 .event .event-title {
@@ -336,10 +375,29 @@ body {
   text-overflow: ellipsis;
 }
 
-.now-line {
+.event-resize {
   position: absolute;
   left: 0;
   right: 0;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.event-resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: #93c5fd;
+}
+
+.now-line {
+  position: absolute;
   height: 2px;
   background: var(--accent);
   opacity: 0.9;
@@ -365,6 +423,80 @@ body {
   background: #fff;
   border: 1px solid var(--line);
   color: var(--muted);
+}
+
+.month-head-cell {
+  border-right: 1px solid var(--line);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.month-head-cell:last-child {
+  border-right: 0;
+}
+
+.month-cell {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.month-cell:nth-child(7n) {
+  border-right: 0;
+}
+
+.month-cell.today {
+  background: var(--accent-soft);
+}
+
+.month-cell.out-month {
+  background: #fafcff;
+}
+
+.month-day-number {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.month-cell.out-month .month-day-number {
+  color: #9ca3af;
+}
+
+.month-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.month-event-chip {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 6px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-more {
+  font-size: 11px;
+  color: var(--muted);
+  padding-left: 2px;
 }
 
 .modal {
