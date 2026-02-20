@@ -49,12 +49,10 @@
 	}
 
 	const el = {
-		drawer: document.getElementById("drawer"),
 		grid: document.getElementById("calendarGrid"),
 		gridHead: document.getElementById("gridHead"),
 		gridBody: document.getElementById("gridBody"),
 		rangeLabel: document.getElementById("rangeLabel"),
-		monthLabel: document.getElementById("monthLabel"),
 		prevBtn: document.getElementById("prevBtn"),
 		nextBtn: document.getElementById("nextBtn"),
 		todayBtn: document.getElementById("todayBtn"),
@@ -94,7 +92,6 @@
 	function init() {
 		hydrateUser();
 		bindUi();
-		updateTodayBadge();
 		updateSidebarToggleLabel();
 		render();
 		scheduleNowClockAndLine();
@@ -245,7 +242,6 @@
 		const start = new Date(state.weekStart);
 		const end = addDays(start, 6);
 		el.rangeLabel.textContent = formatRange(start, end);
-		updateMonthLabel();
 
 		const today = startOfDay(new Date());
 		const todayIndex = sameDayRangeIndex(start, today);
@@ -264,7 +260,7 @@
 			}
 			const inner = document.createElement("div");
 			inner.className = "head-day";
-			inner.innerHTML = `<div class="day-dow">${formatDowLetter(day)}</div><div class="day-num">${day.getDate()}</div>`;
+			inner.innerHTML = `<div class="head-main"><span class="day-num">${day.getDate()}</span><span class="day-dow">, ${formatDow(day)}</span></div>`;
 			cell.appendChild(inner);
 			el.gridHead.appendChild(cell);
 		}
@@ -310,7 +306,6 @@
 	function renderMonthGrid() {
 		const monthStart = startOfMonth(state.monthStart);
 		el.rangeLabel.textContent = formatMonthTitle(monthStart);
-		updateMonthLabel();
 		el.gridBody.style.gridTemplateRows = "";
 
 		el.gridHead.innerHTML = "";
@@ -991,35 +986,14 @@
 		return apiBaseUrl || window.location.origin;
 	}
 
-	function updateTodayBadge() {
-		if (!el.todayBtn) return;
-		const now = new Date();
-		el.todayBtn.textContent = String(now.getDate());
-	}
-
-	function updateMonthLabel() {
-		if (!el.monthLabel) return;
-		const base =
-			state.view === "month"
-				? startOfMonth(state.monthStart)
-				: addDays(startOfDay(state.weekStart), 3);
-		const s = base.toLocaleString("ru-RU", { month: "long", year: "numeric" });
-		el.monthLabel.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-	}
-
 	function updateSidebarToggleLabel() {
 		if (!el.sidebarToggle) return;
-		const open = el.drawer ? !el.drawer.classList.contains("hidden") : false;
+		const open = document.querySelector(".app")?.classList.contains("sidebar-open");
 		el.sidebarToggle.textContent = open ? "✕" : "☰";
 		el.sidebarToggle.title = open ? "Закрыть меню" : "Открыть меню";
 	}
 
 	function toggleSidebar() {
-		if (el.drawer) {
-			el.drawer.classList.toggle("hidden");
-			updateSidebarToggleLabel();
-			return;
-		}
 		const app = document.querySelector(".app");
 		if (!app) return;
 		app.classList.toggle("sidebar-open");
@@ -1027,20 +1001,10 @@
 	}
 
 	function closeSidebar() {
-		if (el.drawer) {
-			el.drawer.classList.add("hidden");
-			updateSidebarToggleLabel();
-			return;
-		}
 		const app = document.querySelector(".app");
 		if (!app) return;
 		app.classList.remove("sidebar-open");
 		updateSidebarToggleLabel();
-	}
-
-	function formatDowLetter(d) {
-		const s = formatDow(d);
-		return s ? s.slice(0, 1) : "";
 	}
 
 	function startOfDay(d) {

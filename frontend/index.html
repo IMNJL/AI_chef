@@ -1,79 +1,68 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <div class="app">
-    <header class="appbar">
-      <button class="icon-btn" id="sidebarToggle" type="button" aria-label="Меню">☰</button>
-
-      <div class="appbar-title">
-        <button class="month-btn" id="monthBtn" type="button">
-          <span id="monthLabel">February</span>
-          <span class="caret">▾</span>
-        </button>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI Chef Calendar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app sidebar-hidden">
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-mark" aria-hidden="true"></span>
+        <span class="logo-text"><span class="logo-my">my</span> itmo</span>
       </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item">Главная</button>
+        <button class="nav-item active">Расписание</button>
+        <button class="nav-item">Зачетка</button>
+        <button class="nav-item">Учебный план</button>
+        <button class="nav-item">Запись по выбору</button>
+        <button class="nav-item">Спорт</button>
+        <button class="nav-item">Практики</button>
+        <button class="nav-item">Финансы</button>
+        <button class="nav-item">Персоналии</button>
+        <button class="nav-item">Заявки и очереди</button>
+        <button class="nav-item">Сервисы</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="status" id="syncStatus">Синхронизация включена</div>
+        <div class="note">my.itmo style</div>
+      </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-      <div class="appbar-spacer"></div>
-
-      <button class="icon-btn" id="searchBtn" type="button" aria-label="Поиск">⌕</button>
-      <button class="today-badge" id="todayBtn" type="button" aria-label="Сегодня">19</button>
-
-      <div class="user user--appbar">
-        <div class="avatar" id="avatar">AI</div>
-        <div class="user-meta">
-          <div class="user-name" id="userName">Вы</div>
-          <div class="user-id" id="userId"></div>
+    <main class="main">
+      <header class="topbar">
+        <button class="sidebar-toggle ghost" id="sidebarToggle" title="Открыть меню">☰</button>
+        <div class="title">Расписание</div>
+        <div class="actions">
+          <button class="ghost" id="todayBtn">Сегодня</button>
+          <button class="ghost" id="reloadBtn">Обновить</button>
+          <button class="ghost" id="newBtn">Добавить</button>
         </div>
-      </div>
-    </header>
-
-    <div class="drawer hidden" id="drawer">
-      <div class="drawer-backdrop" id="sidebarBackdrop"></div>
-      <div class="drawer-panel" role="dialog" aria-modal="true">
-        <aside class="sidebar">
-          <div class="logo">
-            <span class="logo-mark">ai</span>
-            <span class="logo-text">chef</span>
+        <div class="user">
+          <div class="avatar">AI</div>
+          <div class="user-meta">
+            <div class="user-name" id="userName">Вы</div>
+            <div class="user-id" id="userId"></div>
           </div>
+        </div>
+        <div class="clock" id="nowClock">--:--</div>
+      </header>
 
-          <div class="drawer-controls">
-            <button class="ghost" id="prevBtn" type="button">◀</button>
-            <button class="ghost" id="nextBtn" type="button">▶</button>
-            <button class="ghost" id="reloadBtn" type="button">Обновить</button>
-          </div>
-
-          <div class="view-switch">
-            <button class="pill active" data-view="week" type="button">Неделя</button>
-            <button class="pill" data-view="month" type="button">Месяц</button>
-          </div>
-
-          <nav class="nav">
-            <button class="nav-item active" type="button">Расписание</button>
-            <button class="nav-item" type="button">Главная</button>
-            <button class="nav-item" type="button">Заметки</button>
-            <button class="nav-item" type="button">Сервисы</button>
-          </nav>
-          <div class="sidebar-footer">
-            <div class="status" id="syncStatus">Синхронизация включена</div>
-            <div class="note">Mini App через GitHub Pages</div>
-          </div>
-        </aside>
-      </div>
-    </div>
-
-    <main class="main main--content">
       <section class="calendar">
-        <div class="range sr-only" id="rangeLabel">Неделя</div>
-
-        <div class="grid" id="calendarGrid">
-          <div class="grid-head" id="gridHead"></div>
-          <div class="grid-body" id="gridBody"></div>
-        </div>
-      </section>
-    </main>
-
-    <button class="fab" id="newBtn" type="button" aria-label="Добавить">+</button>
-    <div class="clock sr-only" id="nowClock">--:--</div>
-  </div>
+        <div class="calendar-header">
+          <div class="range" id="rangeLabel">Неделя</div>
+          <div class="nav">
+            <button class="ghost" id="prevBtn">◀</button>
+            <button class="ghost" id="nextBtn">▶</button>
+          </div>
+          <div class="view-switch">
             <button class="pill active" data-view="week">Неделя</button>
             <button class="pill" data-view="month">Месяц</button>
           </div>
