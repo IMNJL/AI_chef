@@ -21,7 +21,12 @@
     weekHead: document.getElementById("weekHead"),
     weekGrid: document.getElementById("weekGrid"),
     prevBtn: document.getElementById("prevBtn"),
-    nextBtn: document.getElementById("nextBtn")
+    nextBtn: document.getElementById("nextBtn"),
+    menuToggle: document.getElementById("menuToggle"),
+    sidebarBackdrop: document.getElementById("sidebarBackdrop"),
+    userName: document.getElementById("userName"),
+    userId: document.getElementById("userId"),
+    userAvatar: document.getElementById("userAvatar")
   };
 
   const state = {
@@ -31,6 +36,7 @@
   init();
 
   function init() {
+    hydrateUser();
     renderMenu();
     bind();
     renderWeek();
@@ -46,6 +52,68 @@
       state.weekStart = addDays(state.weekStart, 7);
       renderWeek();
     });
+
+    if (el.menuToggle) {
+      el.menuToggle.addEventListener("click", () => {
+        document.body.classList.toggle("sidebar-open");
+      });
+    }
+
+    if (el.sidebarBackdrop) {
+      el.sidebarBackdrop.addEventListener("click", () => {
+        document.body.classList.remove("sidebar-open");
+      });
+    }
+  }
+
+  function hydrateUser() {
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg && typeof tg.ready === "function") {
+      try {
+        tg.ready();
+      } catch {
+        // ignore
+      }
+    }
+
+    const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
+    const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromUrl();
+    const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
+
+    if (el.userName) {
+      el.userName.textContent = userId ? `id ${userId}` : "id пользователя";
+    }
+    if (el.userId) {
+      el.userId.textContent = userId ? `telegram: ${userId}` : "telegram: -";
+    }
+
+    if (!el.userAvatar) return;
+    if (photoUrl) {
+      const img = document.createElement("img");
+      img.src = photoUrl;
+      img.alt = "Профиль";
+      img.width = 38;
+      img.height = 38;
+      img.style.width = "100%";
+      img.style.height = "100%";
+      img.style.objectFit = "cover";
+      el.userAvatar.textContent = "";
+      el.userAvatar.appendChild(img);
+      return;
+    }
+
+    el.userAvatar.textContent = userId ? String(userId).slice(-2) : "ID";
+  }
+
+  function getTelegramIdFromUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const value = params.get("telegramId") || params.get("tg") || "";
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0 ? String(n) : "";
+    } catch {
+      return "";
+    }
   }
 
   function renderMenu() {

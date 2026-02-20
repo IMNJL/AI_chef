@@ -10,8 +10,9 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="brand">
         <span class="brand-my">my</span>
         <span class="brand-mark" aria-hidden="true"></span>
@@ -22,16 +23,14 @@
 
     <main class="main">
       <header class="header">
+        <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
         <h1 class="title">Расписание</h1>
         <div class="header-user">
-          <button class="icon-btn" aria-label="Поиск">
-            <span>⌕</span>
-          </button>
           <div class="user-card">
-            <div class="avatar">ГК</div>
+            <div class="avatar" id="userAvatar">ID</div>
             <div class="user-text">
-              <div class="name">Григорий Куранов</div>
-              <div class="id">368409</div>
+              <div class="name" id="userName">id пользователя</div>
+              <div class="id" id="userId">id -</div>
             </div>
           </div>
         </div>
@@ -50,6 +49,7 @@
     </main>
   </div>
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

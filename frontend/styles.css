@@ -22,7 +22,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: 1fr;
   min-height: 100vh;
 }
 
@@ -31,6 +31,33 @@ body {
   background: #fff;
   padding: 20px 14px;
   overflow: auto;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  z-index: 40;
+  transform: translateX(-105%);
+  transition: transform 0.18s ease;
+}
+
+body.sidebar-open .sidebar {
+  transform: translateX(0);
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 30;
+  transition: opacity 0.15s ease;
+}
+
+body.sidebar-open .sidebar-backdrop {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .brand {
@@ -98,23 +125,29 @@ body {
   background: #fff;
 }
 
+.menu-toggle {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 22px;
+  line-height: 1;
+}
+
 .title {
   margin: 0;
   font-size: 52px;
   font-weight: 700;
+  margin-right: auto;
+  margin-left: 12px;
 }
 
 .header-user {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.icon-btn {
-  border: 0;
-  background: transparent;
-  font-size: 28px;
-  color: #6b7280;
 }
 
 .user-card {
@@ -133,6 +166,8 @@ body {
   place-items: center;
   font-size: 12px;
   font-weight: 600;
+  object-fit: cover;
+  overflow: hidden;
 }
 
 .user-text .name {
@@ -255,10 +290,10 @@ body {
 }
 
 @media (max-width: 760px) {
-  .layout { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
   .header { padding: 0 14px; }
   .schedule-card { margin: 10px; }
   .week-head-cell { font-size: 14px; min-height: 40px; }
   .time-label { font-size: 12px; }
+  .user-text .name { font-size: 12px; }
+  .user-text .id { font-size: 11px; }
 }
