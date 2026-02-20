@@ -1,16 +1,7 @@
 (() => {
   const menuItems = [
-    { icon: "⌂", label: "Главная" },
     { icon: "▦", label: "Расписание", active: true },
-    { icon: "☰", label: "Зачётка" },
-    { icon: "◍", label: "Учебный план" },
-    { icon: "✎", label: "Запись по выбору" },
-    { icon: "♡", label: "Спорт" },
-    { icon: "▣", label: "Практики" },
-    { icon: "◈", label: "Финансы" },
-    { icon: "◉", label: "Персоналии" },
-    { icon: "≣", label: "Заявки и очереди" },
-    { icon: "◫", label: "Сервисы" }
+    { icon: "✎", label: "Заметки" }
   ];
 
   const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
