@@ -155,6 +155,7 @@ body.sidebar-open .sidebar-backdrop {
 
 .title {
   margin: 0;
+  font-family: "Playfair Display", serif;
   font-size: 52px;
   font-weight: 700;
   margin-right: auto;
@@ -195,6 +196,7 @@ body.sidebar-open .sidebar-backdrop {
 .user-text .id {
   font-size: 12px;
   color: var(--muted);
+  display: none;
 }
 
 .schedule-card {
@@ -247,6 +249,10 @@ body.sidebar-open .sidebar-backdrop {
   font-weight: 600;
 }
 
+.week-head-cell.today {
+  background: #eef5ff;
+}
+
 .week-head-cell:last-child {
   border-right: 0;
 }
@@ -274,6 +280,10 @@ body.sidebar-open .sidebar-backdrop {
   position: relative;
 }
 
+.day-cell.today {
+  background: #eef5ff;
+}
+
 .time-cell {
   background: #fff;
 }
@@ -292,6 +302,30 @@ body.sidebar-open .sidebar-backdrop {
 
 .time-cell.first-hour .time-label {
   transform: translateY(0);
+}
+
+.week-grid {
+  position: relative;
+}
+
+.now-time-line {
+  position: absolute;
+  left: var(--time-col-width);
+  right: 0;
+  height: 1px;
+  background: #f43f5e;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.now-time-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #f43f5e;
+  left: -6px;
+  top: -6px;
 }
 
 @media (max-width: 980px) {

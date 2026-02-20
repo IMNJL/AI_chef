@@ -31,7 +31,8 @@
   };
 
   const state = {
-    weekStart: startOfWeek(new Date())
+    weekStart: startOfWeek(new Date()),
+    nowTimer: null
   };
 
   init();
@@ -41,6 +42,7 @@
     renderMenu();
     bind();
     renderWeek();
+    scheduleNowLine();
   }
 
   function bind() {
@@ -86,12 +88,14 @@
     const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
     const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromUrl();
     const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
+    const username = tgUser && tgUser.username ? `@${tgUser.username}` : "";
+    const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
-      el.userName.textContent = userId ? `id ${userId}` : "id пользователя";
+      el.userName.textContent = `Mr/Ms ${displayName}`;
     }
     if (el.userId) {
-      el.userId.textContent = userId ? `telegram: ${userId}` : "telegram: -";
+      el.userId.textContent = "";
     }
 
     if (!el.userAvatar) return;
@@ -138,6 +142,7 @@
     renderRange();
     renderHead();
     renderGrid();
+    renderNowLine();
   }
 
   function renderRange() {
@@ -151,6 +156,7 @@
 
   function renderHead() {
     el.weekHead.innerHTML = "";
+    const today = startOfDay(new Date());
 
     const blank = document.createElement("div");
     blank.className = "week-head-cell";
@@ -160,6 +166,9 @@
       const d = addDays(state.weekStart, i);
       const cell = document.createElement("div");
       cell.className = "week-head-cell";
+      if (sameDay(d, today)) {
+        cell.classList.add("today");
+      }
       cell.innerHTML = `<span>${d.getDate()}</span><span class="dow">${dayNames[i]}</span>`;
       el.weekHead.appendChild(cell);
     }
@@ -167,6 +176,7 @@
 
   function renderGrid() {
     el.weekGrid.innerHTML = "";
+    const today = startOfDay(new Date());
 
     for (let hour = 0; hour < 24; hour++) {
       const timeCell = document.createElement("div");
@@ -179,11 +189,51 @@
       for (let day = 0; day < 7; day++) {
         const dayCell = document.createElement("div");
         dayCell.className = "day-cell";
+        const currentDay = addDays(state.weekStart, day);
+        if (sameDay(currentDay, today)) {
+          dayCell.classList.add("today");
+        }
         dayCell.style.gridRow = String(hour + 1);
         dayCell.style.gridColumn = String(day + 2);
         el.weekGrid.appendChild(dayCell);
       }
     }
+  }
+
+  function scheduleNowLine() {
+    if (state.nowTimer) clearInterval(state.nowTimer);
+    state.nowTimer = setInterval(() => {
+      renderNowLine();
+    }, 60 * 1000);
+  }
+
+  function renderNowLine() {
+    const oldLine = el.weekGrid.querySelector(".now-time-line");
+    if (oldLine) oldLine.remove();
+
+    const now = new Date();
+    const weekStart = startOfDay(state.weekStart);
+    const weekEnd = addDays(weekStart, 7);
+    if (now < weekStart || now >= weekEnd) return;
+
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const top = (minutes / 60) * getRowHeight();
+
+    const line = document.createElement("div");
+    line.className = "now-time-line";
+    line.style.top = `${top}px`;
+
+    const dot = document.createElement("div");
+    dot.className = "now-time-dot";
+    line.appendChild(dot);
+    el.weekGrid.appendChild(line);
+  }
+
+  function getRowHeight() {
+    const firstCell = el.weekGrid.querySelector(".time-cell");
+    if (!firstCell) return 52;
+    const h = firstCell.getBoundingClientRect().height;
+    return Number.isFinite(h) && h > 0 ? h : 52;
   }
 
   function startOfWeek(date) {
@@ -202,6 +252,14 @@
     const d = new Date(date);
     d.setDate(d.getDate() + days);
     return d;
+  }
+
+  function sameDay(a, b) {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
   }
 
   function monthShort(date) {
