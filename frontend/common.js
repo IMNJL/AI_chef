@@ -104,7 +104,8 @@
 
   window.AiCalCommon = {
     getApiBaseUrl,
-    buildAuth
+    buildAuth,
+    getEndpointCandidates
   };
 
   function getApiBaseUrl() {
@@ -147,5 +148,15 @@
       headers["X-Telegram-Init-Data"] = initData;
     }
     return { headers, initData, telegramId };
+  }
+
+  function getEndpointCandidates(key, fallback) {
+    const cfg = window.__APP_CONFIG__;
+    const endpoints = cfg && cfg.endpoints && typeof cfg.endpoints === "object" ? cfg.endpoints : null;
+    const value = endpoints && Array.isArray(endpoints[key]) ? endpoints[key] : null;
+    if (value && value.length) {
+      return value;
+    }
+    return fallback;
   }
 })();

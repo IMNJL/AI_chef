@@ -22,11 +22,13 @@
     if (!title || !content) return;
 
     setStatus("Сохраняю...");
-    const ok = await request("/api/miniapp/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content })
-    });
+    const ok = await requestWithFallback(
+      getNoteEndpoints(),
+      [
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, content }) },
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, content }) }
+      ]
+    );
 
     if (!ok.success) {
       setStatus(ok.message);
@@ -40,7 +42,7 @@
 
   async function loadNotes() {
     setStatus("Загрузка...");
-    const res = await request("/api/miniapp/notes");
+    const res = await requestWithFallback(getNoteEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
       setStatus(res.message);
       renderNotes([]);
@@ -80,16 +82,39 @@
     try {
       const response = await fetch(url.toString(), { ...init, headers });
       if (!response.ok) {
-        return { success: false, message: apiErrorMessage(response.status) };
+        return { success: false, status: response.status, message: apiErrorMessage(response.status) };
       }
       if (response.status === 204) {
-        return { success: true, data: null };
+        return { success: true, status: response.status, data: null };
       }
       const data = await response.json().catch(() => null);
-      return { success: true, data };
+      return { success: true, status: response.status, data };
     } catch {
       return { success: false, message: "Ошибка сети" };
     }
+  }
+
+  async function requestWithFallback(paths, variants) {
+    let lastError = { success: false, message: "Ошибка API" };
+    for (const path of paths) {
+      for (const variant of variants) {
+        const res = await request(path, variant);
+        if (res.success) return res;
+        lastError = res;
+        if (res.status !== 404 && res.status !== 405) {
+          return res;
+        }
+      }
+    }
+    return lastError;
+  }
+
+  function getNoteEndpoints() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.getEndpointCandidates === "function") {
+      return common.getEndpointCandidates("notes", ["/api/miniapp/notes", "/api/notes", "/notes"]);
+    }
+    return ["/api/miniapp/notes", "/api/notes", "/notes"];
   }
 
   function apiErrorMessage(status) {

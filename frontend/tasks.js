@@ -51,11 +51,13 @@
     };
 
     setStatus("Сохраняю...");
-    const res = await request("/api/miniapp/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    const res = await requestWithFallback(
+      getTaskEndpoints(),
+      [
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      ]
+    );
 
     if (!res.success) {
       setStatus(res.message);
@@ -70,7 +72,7 @@
 
   async function loadTasks() {
     setStatus("Загрузка...");
-    const res = await request("/api/miniapp/tasks");
+    const res = await requestWithFallback(getTaskEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
       renderTasks([]);
       setStatus(res.message);
@@ -106,11 +108,13 @@
         check.classList.add("done");
         text.classList.add("done");
 
-        const patchRes = await request(`/api/miniapp/tasks/${task.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ completed: true })
-        });
+        const patchRes = await requestWithFallback(
+          getTaskEndpoints().map((base) => `${base}/${task.id}`),
+          [
+            { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: true }) },
+            { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: true }) }
+          ]
+        );
 
         if (!patchRes.success) {
           check.disabled = false;
@@ -122,7 +126,10 @@
 
         setStatus("Задача выполнена. Удалю через 5 секунд...");
         window.setTimeout(async () => {
-          await request(`/api/miniapp/tasks/${task.id}`, { method: "DELETE" });
+          await requestWithFallback(
+            getTaskEndpoints().map((base) => `${base}/${task.id}`),
+            [{ method: "DELETE" }]
+          );
           item.remove();
           if (!el.list.children.length) {
             setStatus("Пока нет задач");
@@ -166,16 +173,39 @@
     try {
       const response = await fetch(url.toString(), { ...init, headers });
       if (!response.ok) {
-        return { success: false, message: apiErrorMessage(response.status) };
+        return { success: false, status: response.status, message: apiErrorMessage(response.status) };
       }
       if (response.status === 204) {
-        return { success: true, data: null };
+        return { success: true, status: response.status, data: null };
       }
       const data = await response.json().catch(() => null);
-      return { success: true, data };
+      return { success: true, status: response.status, data };
     } catch {
       return { success: false, message: "Ошибка сети" };
     }
+  }
+
+  async function requestWithFallback(paths, variants) {
+    let lastError = { success: false, message: "Ошибка API" };
+    for (const path of paths) {
+      for (const variant of variants) {
+        const res = await request(path, variant);
+        if (res.success) return res;
+        lastError = res;
+        if (res.status !== 404 && res.status !== 405) {
+          return res;
+        }
+      }
+    }
+    return lastError;
+  }
+
+  function getTaskEndpoints() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.getEndpointCandidates === "function") {
+      return common.getEndpointCandidates("tasks", ["/api/miniapp/tasks", "/api/tasks", "/tasks"]);
+    }
+    return ["/api/miniapp/tasks", "/api/tasks", "/tasks"];
   }
 
   function apiErrorMessage(status) {
