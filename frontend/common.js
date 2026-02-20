@@ -104,6 +104,7 @@
 
   window.AiCalCommon = {
     getApiBaseUrl,
+    getApiBaseCandidates,
     buildAuth,
     getEndpointCandidates
   };
@@ -148,6 +149,20 @@
       headers["X-Telegram-Init-Data"] = initData;
     }
     return { headers, initData, telegramId };
+  }
+
+  function getApiBaseCandidates() {
+    const protocol = window.location.protocol || "http:";
+    const host = window.location.hostname || "";
+    const list = [getApiBaseUrl()];
+
+    if (host) {
+      list.push(`${protocol}//${host}:8080`);
+    }
+    list.push("http://localhost:8080");
+    list.push("http://127.0.0.1:8080");
+
+    return Array.from(new Set(list.map((x) => String(x || "").trim().replace(/\/+$/, "")).filter(Boolean)));
   }
 
   function getEndpointCandidates(key, fallback) {

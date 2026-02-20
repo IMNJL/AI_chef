@@ -1,9 +1,7 @@
 window.__APP_CONFIG__ = {
-  // Example: "https://api.example.com"
-  apiBaseUrl: "",
-  // Override endpoints if REST module uses different routes
+  apiBaseUrl: "http://localhost:8010",
   endpoints: {
-    tasks: ["/api/miniapp/tasks", "/api/tasks", "/tasks"],
-    notes: ["/api/miniapp/notes", "/api/notes", "/notes"]
+    tasks: ["/api/miniapp/tasks"],
+    notes: ["/api/miniapp/notes"]
   }
 };

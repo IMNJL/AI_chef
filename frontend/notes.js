@@ -67,9 +67,9 @@
     }
   }
 
-  async function request(path, init = {}) {
+  async function request(path, init = {}, forcedBase = "") {
     const common = window.AiCalCommon;
-    const base = common && common.getApiBaseUrl ? common.getApiBaseUrl() : window.location.origin;
+    const base = forcedBase || (common && common.getApiBaseUrl ? common.getApiBaseUrl() : window.location.origin);
     const auth = common && common.buildAuth ? common.buildAuth() : { headers: {}, initData: "", telegramId: "" };
 
     const url = new URL(base + path);
@@ -96,13 +96,19 @@
 
   async function requestWithFallback(paths, variants) {
     let lastError = { success: false, message: "Ошибка API" };
-    for (const path of paths) {
-      for (const variant of variants) {
-        const res = await request(path, variant);
-        if (res.success) return res;
-        lastError = res;
-        if (res.status !== 404 && res.status !== 405) {
-          return res;
+    const common = window.AiCalCommon;
+    const bases = common && typeof common.getApiBaseCandidates === "function"
+      ? common.getApiBaseCandidates()
+      : [window.location.origin];
+    for (const base of bases) {
+      for (const path of paths) {
+        for (const variant of variants) {
+          const res = await request(path, variant, base);
+          if (res.success) return res;
+          lastError = res;
+          if (res.status !== 404 && res.status !== 405) {
+            return res;
+          }
         }
       }
     }
