@@ -270,7 +270,7 @@
 		for (let hour = FULL_DAY_START_HOUR; hour < FULL_DAY_END_HOUR; hour++) {
 			const timeCell = document.createElement("div");
 			timeCell.className = "grid-cell time-cell";
-			timeCell.innerHTML = `<span class="time-label">${pad2(hour)}:00</span>`;
+			timeCell.innerHTML = `<span class="time-label">${hour}:00</span>`;
 			el.gridBody.appendChild(timeCell);
 
 			for (let d = 0; d < 7; d++) {
