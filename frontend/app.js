@@ -23,6 +23,7 @@
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
     menuToggle: document.getElementById("menuToggle"),
+    sidebarClose: document.getElementById("sidebarClose"),
     sidebarBackdrop: document.getElementById("sidebarBackdrop"),
     userName: document.getElementById("userName"),
     userId: document.getElementById("userId"),
@@ -61,6 +62,12 @@
 
     if (el.sidebarBackdrop) {
       el.sidebarBackdrop.addEventListener("click", () => {
+        document.body.classList.remove("sidebar-open");
+      });
+    }
+
+    if (el.sidebarClose) {
+      el.sidebarClose.addEventListener("click", () => {
         document.body.classList.remove("sidebar-open");
       });
     }

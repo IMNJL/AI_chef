@@ -45,6 +45,19 @@ body.sidebar-open .sidebar {
   transform: translateX(0);
 }
 
+.sidebar-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 18px;
+}
+
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -123,6 +136,8 @@ body.sidebar-open .sidebar-backdrop {
   justify-content: space-between;
   padding: 0 28px;
   background: #fff;
+  position: relative;
+  z-index: 45;
 }
 
 .menu-toggle {
@@ -134,6 +149,8 @@ body.sidebar-open .sidebar-backdrop {
   color: #475569;
   font-size: 22px;
   line-height: 1;
+  position: relative;
+  z-index: 46;
 }
 
 .title {
