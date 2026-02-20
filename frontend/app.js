@@ -1,7 +1,8 @@
 (() => {
   const menuItems = [
-    { icon: "▦", label: "Расписание", active: true },
-    { icon: "✎", label: "Заметки" }
+    { icon: "▦", label: "Расписание", href: "index.html", active: true },
+    { icon: "✓", label: "Задачи", href: "tasks.html" },
+    { icon: "✎", label: "Заметки", href: "notes.html" }
   ];
 
   const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -14,7 +15,6 @@
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
     menuToggle: document.getElementById("menuToggle"),
-    sidebarClose: document.getElementById("sidebarClose"),
     sidebarBackdrop: document.getElementById("sidebarBackdrop"),
     userName: document.getElementById("userName"),
     userId: document.getElementById("userId"),
@@ -59,11 +59,6 @@
       });
     }
 
-    if (el.sidebarClose) {
-      el.sidebarClose.addEventListener("click", () => {
-        document.body.classList.remove("sidebar-open");
-      });
-    }
   }
 
   function hydrateUser() {
@@ -121,11 +116,11 @@
   function renderMenu() {
     el.menu.innerHTML = "";
     for (const item of menuItems) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `menu-item${item.active ? " active" : ""}`;
-      btn.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
-      el.menu.appendChild(btn);
+      const link = document.createElement("a");
+      link.className = `menu-item${item.active ? " active" : ""}`;
+      link.href = item.href;
+      link.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
+      el.menu.appendChild(link);
     }
   }
 

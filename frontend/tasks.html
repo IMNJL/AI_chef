@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Chef Schedule</title>
+  <title>AiCal Tasks</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-page="tasks">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="layout">
     <aside class="sidebar" id="sidebar">
@@ -32,20 +32,23 @@
         </div>
       </header>
 
-      <section class="schedule-card">
-        <div class="week-toolbar">
-          <button class="nav-btn" id="prevBtn" aria-label="Прошлая неделя">‹</button>
-          <div class="week-range" id="weekRange"></div>
-          <button class="nav-btn" id="nextBtn" aria-label="Следующая неделя">›</button>
+      <section class="page-card">
+        <div class="page-title">Задачи</div>
+        <div class="page-list">
+          <div class="page-item">
+            <div class="page-item-title">Подготовить план недели</div>
+            <div class="page-item-meta">Базовая страница задач</div>
+          </div>
+          <div class="page-item">
+            <div class="page-item-title">Разбить задачи по приоритетам</div>
+            <div class="page-item-meta">High / Medium / Low</div>
+          </div>
         </div>
-
-        <div class="week-head" id="weekHead"></div>
-        <div class="week-grid" id="weekGrid"></div>
       </section>
     </main>
   </div>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="app.js"></script>
+  <script src="common.js"></script>
 </body>
 </html>
