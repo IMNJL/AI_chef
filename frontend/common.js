@@ -108,7 +108,34 @@
   };
 
   function getApiBaseUrl() {
-    return window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const queryBase = (params.get("apiBaseUrl") || "").trim();
+    if (queryBase) {
+      try {
+        localStorage.setItem("aical_api_base", queryBase);
+      } catch {
+        // ignore
+      }
+      return queryBase.replace(/\/+$/, "");
+    }
+
+    const cfgBase = window.__APP_CONFIG__ && typeof window.__APP_CONFIG__.apiBaseUrl === "string"
+      ? window.__APP_CONFIG__.apiBaseUrl.trim()
+      : "";
+    if (cfgBase) {
+      return cfgBase.replace(/\/+$/, "");
+    }
+
+    try {
+      const saved = (localStorage.getItem("aical_api_base") || "").trim();
+      if (saved) {
+        return saved.replace(/\/+$/, "");
+      }
+    } catch {
+      // ignore
+    }
+
+    return window.location.origin.replace(/\/+$/, "");
   }
 
   function buildAuth() {

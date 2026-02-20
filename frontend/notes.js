@@ -80,8 +80,7 @@
     try {
       const response = await fetch(url.toString(), { ...init, headers });
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        return { success: false, message: text || `Ошибка API (${response.status})` };
+        return { success: false, message: apiErrorMessage(response.status) };
       }
       if (response.status === 204) {
         return { success: true, data: null };
@@ -91,6 +90,12 @@
     } catch {
       return { success: false, message: "Ошибка сети" };
     }
+  }
+
+  function apiErrorMessage(status) {
+    if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
+    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    return `Ошибка API (${status})`;
   }
 
   function setStatus(message) {

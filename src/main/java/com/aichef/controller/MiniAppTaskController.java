@@ -97,6 +97,66 @@ public class MiniAppTaskController {
         return ResponseEntity.ok(TaskDto.from(task));
     }
 
+    @PatchMapping("/{id}")
+    public ResponseEntity<?> update(
+            @PathVariable("id") UUID id,
+            @RequestBody TaskUpdateRequest request,
+            @RequestHeader(value = "X-Telegram-Init-Data", required = false) String initData,
+            @RequestParam(value = "telegramId", required = false) Long telegramId
+    ) {
+        Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
+        }
+
+        User user = userOpt.get();
+        TaskItem task = taskItemRepository.findByIdAndCalendarDay_User(id, user).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Task not found");
+        }
+
+        if (request.title() != null) {
+            String title = request.title().trim();
+            if (!title.isBlank()) {
+                task.setTitle(title);
+            }
+        }
+        if (request.priority() != null) {
+            task.setPriority(resolvePriority(request.priority()));
+        }
+        if (request.completed() != null) {
+            task.setCompleted(request.completed());
+        }
+        if (request.dueAt() != null) {
+            task.setDueAt(request.dueAt());
+            LocalDate day = request.dueAt().atZoneSameInstant(DEFAULT_ZONE).toLocalDate();
+            task.setCalendarDay(getOrCreateDay(user, day));
+        }
+
+        taskItemRepository.save(task);
+        return ResponseEntity.ok(TaskDto.from(task));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(
+            @PathVariable("id") UUID id,
+            @RequestHeader(value = "X-Telegram-Init-Data", required = false) String initData,
+            @RequestParam(value = "telegramId", required = false) Long telegramId
+    ) {
+        Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
+        }
+
+        TaskItem task = taskItemRepository.findByIdAndCalendarDay_User(id, userOpt.get()).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Task not found");
+        }
+
+        taskItemRepository.delete(task);
+        return ResponseEntity.noContent().build();
+    }
+
     private PriorityLevel resolvePriority(String value) {
         if (value == null || value.isBlank()) {
             return PriorityLevel.MEDIUM;
@@ -120,6 +180,9 @@ public class MiniAppTaskController {
     }
 
     public record TaskCreateRequest(String title, String priority, OffsetDateTime dueAt) {
+    }
+
+    public record TaskUpdateRequest(String title, String priority, Boolean completed, OffsetDateTime dueAt) {
     }
 
     public record TaskDto(

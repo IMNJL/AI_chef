@@ -1,5 +1,8 @@
 (() => {
   const el = {
+    addBtn: document.getElementById("taskAddBtn"),
+    modal: document.getElementById("taskModal"),
+    modalClose: document.getElementById("taskModalClose"),
     form: document.getElementById("taskForm"),
     title: document.getElementById("taskTitle"),
     priority: document.getElementById("taskPriority"),
@@ -11,8 +14,28 @@
   init();
 
   function init() {
-    if (!el.form || !el.list) return;
-    el.form.addEventListener("submit", onCreate);
+    if (!el.list) return;
+
+    if (el.addBtn) {
+      el.addBtn.addEventListener("click", () => {
+        openModal();
+      });
+    }
+
+    if (el.modalClose) {
+      el.modalClose.addEventListener("click", closeModal);
+    }
+
+    if (el.modal) {
+      el.modal.addEventListener("click", (e) => {
+        if (e.target === el.modal) closeModal();
+      });
+    }
+
+    if (el.form) {
+      el.form.addEventListener("submit", onCreate);
+    }
+
     loadTasks();
   }
 
@@ -28,18 +51,19 @@
     };
 
     setStatus("Сохраняю...");
-    const ok = await request("/api/miniapp/tasks", {
+    const res = await request("/api/miniapp/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    if (!ok.success) {
-      setStatus(ok.message);
+    if (!res.success) {
+      setStatus(res.message);
       return;
     }
 
-    el.form.reset();
+    if (el.form) el.form.reset();
+    closeModal();
     setStatus("Задача создана");
     await loadTasks();
   }
@@ -48,28 +72,83 @@
     setStatus("Загрузка...");
     const res = await request("/api/miniapp/tasks");
     if (!res.success) {
-      setStatus(res.message);
       renderTasks([]);
+      setStatus(res.message);
       return;
     }
 
     const tasks = Array.isArray(res.data) ? res.data : [];
-    renderTasks(tasks);
+    renderTasks(tasks.filter((t) => !t.completed));
     setStatus(tasks.length ? "" : "Пока нет задач");
   }
 
   function renderTasks(tasks) {
     el.list.innerHTML = "";
-    for (const t of tasks) {
+    for (const task of tasks) {
       const item = document.createElement("div");
       item.className = "page-item";
-      const due = t.dueAt ? formatDateTime(t.dueAt) : "без срока";
-      item.innerHTML = `
-        <div class="page-item-title">${escapeHtml(t.title || "(без названия)")}</div>
-        <div class="page-item-meta">${escapeHtml((t.priority || "MEDIUM") + " • " + due)}</div>
+
+      const check = document.createElement("button");
+      check.type = "button";
+      check.className = "task-check";
+      check.setAttribute("aria-label", "Отметить выполненной");
+
+      const text = document.createElement("div");
+      text.className = "task-text";
+      const due = task.dueAt ? formatDateTime(task.dueAt) : "без срока";
+      text.innerHTML = `
+        <div class="page-item-title">${escapeHtml(task.title || "(без названия)")}</div>
+        <div class="page-item-meta">${escapeHtml((task.priority || "MEDIUM") + " • " + due)}</div>
       `;
+
+      check.addEventListener("click", async () => {
+        check.disabled = true;
+        check.classList.add("done");
+        text.classList.add("done");
+
+        const patchRes = await request(`/api/miniapp/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ completed: true })
+        });
+
+        if (!patchRes.success) {
+          check.disabled = false;
+          check.classList.remove("done");
+          text.classList.remove("done");
+          setStatus(patchRes.message);
+          return;
+        }
+
+        setStatus("Задача выполнена. Удалю через 5 секунд...");
+        window.setTimeout(async () => {
+          await request(`/api/miniapp/tasks/${task.id}`, { method: "DELETE" });
+          item.remove();
+          if (!el.list.children.length) {
+            setStatus("Пока нет задач");
+          } else {
+            setStatus("");
+          }
+        }, 5000);
+      });
+
+      item.appendChild(check);
+      item.appendChild(text);
       el.list.appendChild(item);
     }
+  }
+
+  function openModal() {
+    if (!el.modal) return;
+    el.modal.classList.remove("hidden");
+    if (el.title) {
+      window.setTimeout(() => el.title.focus(), 0);
+    }
+  }
+
+  function closeModal() {
+    if (!el.modal) return;
+    el.modal.classList.add("hidden");
   }
 
   async function request(path, init = {}) {
@@ -87,8 +166,7 @@
     try {
       const response = await fetch(url.toString(), { ...init, headers });
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        return { success: false, message: text || `Ошибка API (${response.status})` };
+        return { success: false, message: apiErrorMessage(response.status) };
       }
       if (response.status === 204) {
         return { success: true, data: null };
@@ -98,6 +176,12 @@
     } catch {
       return { success: false, message: "Ошибка сети" };
     }
+  }
+
+  function apiErrorMessage(status) {
+    if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
+    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    return `Ошибка API (${status})`;
   }
 
   function setStatus(message) {
@@ -128,6 +212,7 @@
     return d.toLocaleString("ru-RU", {
       day: "2-digit",
       month: "2-digit",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit"
     });
