@@ -9,7 +9,7 @@
   --sidebar: #ffffff;
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   --radius: 14px;
-  --time-col: 60px;
+  --time-col: 0px;
   --font: "Manrope", system-ui, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -297,7 +297,7 @@ body {
 
 .grid-body > .grid-cell {
   border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   padding: 0;
   position: relative;
   background: transparent;
@@ -405,16 +405,11 @@ body {
   background: #fff;
   overflow: visible;
   z-index: 5;
+  visibility: hidden;
 }
 
 .time-label {
-  position: absolute;
-  right: 8px;
-  top: 0;
-  transform: translateY(-50%);
-  line-height: 1;
-  padding: 0 2px;
-  background: #fff;
+  display: none;
 }
 
 .event {
@@ -760,7 +755,7 @@ body {
 }
 
 @media (max-width: 420px) {
-  :root { --time-col: 46px; --hour-row: 24px; }
+  :root { --time-col: 0px; --hour-row: 24px; }
   .main { padding: 12px; }
   .title { font-size: 20px; }
   .clock { font-size: 16px; }
