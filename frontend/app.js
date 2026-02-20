@@ -4,7 +4,7 @@
 	const FULL_DAY_START_HOUR = 0;
 	const FULL_DAY_END_HOUR = 24;
 	const FULL_DAY_HOURS_COUNT = FULL_DAY_END_HOUR - FULL_DAY_START_HOUR;
-	const DRAG_SNAP_MINUTES = 15;
+	const DRAG_SNAP_MINUTES = 60;
 	const DRAG_THRESHOLD_PX = 6;
 
 	const config = window.__APP_CONFIG__ || {};
@@ -814,7 +814,7 @@
 		el.deleteBtn.style.visibility = "hidden";
 
 		const base = seedDate ? new Date(seedDate) : new Date();
-		const start = roundToNext15(base);
+		const start = roundToNextHour(base);
 		const end = addMinutes(start, 60);
 
 		el.eventTitle.value = "";
@@ -1090,11 +1090,13 @@
 		return String(n).padStart(2, "0");
 	}
 
-	function roundToNext15(d) {
+	function roundToNextHour(d) {
 		const x = new Date(d);
 		x.setSeconds(0, 0);
-		const m = x.getMinutes();
-		x.setMinutes(Math.ceil(m / 15) * 15);
+		x.setMinutes(0, 0, 0);
+		if (x.getTime() < new Date(d).getTime()) {
+			x.setHours(x.getHours() + 1);
+		}
 		return x;
 	}
 

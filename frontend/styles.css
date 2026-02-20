@@ -315,14 +315,6 @@ body {
   background: transparent;
   overflow: hidden;
   z-index: 3;
-  background: transparent;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent calc(var(--hour-row) - 1px),
-    var(--line) calc(var(--hour-row) - 1px),
-    var(--line) var(--hour-row)
-  );
 }
 
 .now-layer {
