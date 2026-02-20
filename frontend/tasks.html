@@ -34,21 +34,25 @@
 
       <section class="page-card">
         <div class="page-title">Задачи</div>
-        <div class="page-list">
-          <div class="page-item">
-            <div class="page-item-title">Подготовить план недели</div>
-            <div class="page-item-meta">Базовая страница задач</div>
-          </div>
-          <div class="page-item">
-            <div class="page-item-title">Разбить задачи по приоритетам</div>
-            <div class="page-item-meta">High / Medium / Low</div>
-          </div>
-        </div>
+        <form class="page-form" id="taskForm">
+          <input type="text" id="taskTitle" placeholder="Новая задача" required />
+          <select id="taskPriority">
+            <option value="LOW">Low</option>
+            <option value="MEDIUM" selected>Medium</option>
+            <option value="HIGH">High</option>
+            <option value="CRITICAL">Critical</option>
+          </select>
+          <input type="datetime-local" id="taskDueAt" />
+          <button type="submit" class="primary-btn">Создать</button>
+        </form>
+        <div class="page-status" id="taskStatus"></div>
+        <div class="page-list" id="taskList"></div>
       </section>
     </main>
   </div>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="common.js"></script>
+  <script src="tasks.js"></script>
 </body>
 </html>

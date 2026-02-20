@@ -27,10 +27,11 @@
   function renderMenu() {
     if (!el.menu) return;
     el.menu.innerHTML = "";
+    const search = window.location.search || "";
     for (const item of menuItems) {
       const link = document.createElement("a");
       link.className = `menu-item${item.key === page ? " active" : ""}`;
-      link.href = item.href;
+      link.href = `${item.href}${search}`;
       link.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
       el.menu.appendChild(link);
     }
@@ -99,5 +100,25 @@
     } catch {
       return "";
     }
+  }
+
+  window.AiCalCommon = {
+    getApiBaseUrl,
+    buildAuth
+  };
+
+  function getApiBaseUrl() {
+    return window.location.origin;
+  }
+
+  function buildAuth() {
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
+    const telegramId = getTelegramIdFromUrl();
+    const headers = {};
+    if (initData) {
+      headers["X-Telegram-Init-Data"] = initData;
+    }
+    return { headers, initData, telegramId };
   }
 })();

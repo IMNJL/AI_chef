@@ -329,6 +329,81 @@ body.sidebar-open .sidebar-backdrop {
   top: -6px;
 }
 
+.page-card {
+  margin: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  max-height: calc(100vh - var(--header-height) - 32px);
+  overflow: auto;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.page-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.page-form input,
+.page-form textarea,
+.page-form select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  background: #fff;
+}
+
+.primary-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-status {
+  min-height: 18px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.page-list {
+  display: grid;
+  gap: 10px;
+}
+
+.page-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.page-item-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.page-item-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 980px) {
   :root {
     --sidebar-width: 220px;
@@ -344,6 +419,7 @@ body.sidebar-open .sidebar-backdrop {
 @media (max-width: 760px) {
   .header { padding: 0 14px; }
   .schedule-card { margin: 10px; }
+  .page-card { margin: 10px; }
   .week-head-cell { font-size: 14px; min-height: 40px; }
   .time-label { font-size: 12px; }
   .user-text .name { font-size: 12px; }

@@ -34,21 +34,19 @@
 
       <section class="page-card">
         <div class="page-title">Заметки</div>
-        <div class="page-list">
-          <div class="page-item">
-            <div class="page-item-title">Идея для проекта</div>
-            <div class="page-item-meta">Базовая страница заметок</div>
-          </div>
-          <div class="page-item">
-            <div class="page-item-title">Покупки на неделю</div>
-            <div class="page-item-meta">Список можно расширить позже</div>
-          </div>
-        </div>
+        <form class="page-form" id="noteForm">
+          <input type="text" id="noteTitle" placeholder="Заголовок заметки" required />
+          <textarea id="noteContent" placeholder="Текст заметки" rows="4" required></textarea>
+          <button type="submit" class="primary-btn">Создать</button>
+        </form>
+        <div class="page-status" id="noteStatus"></div>
+        <div class="page-list" id="noteList"></div>
       </section>
     </main>
   </div>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="common.js"></script>
+  <script src="notes.js"></script>
 </body>
 </html>

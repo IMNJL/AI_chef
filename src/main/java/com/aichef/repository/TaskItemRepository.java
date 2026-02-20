@@ -10,4 +10,6 @@ import java.util.UUID;
 
 public interface TaskItemRepository extends JpaRepository<TaskItem, UUID> {
     List<TaskItem> findByCalendarDay_UserAndCalendarDay_DayDateBetweenOrderByDueAtAsc(User user, LocalDate from, LocalDate to);
+
+    List<TaskItem> findTop100ByCalendarDay_UserOrderByDueAtAsc(User user);
 }

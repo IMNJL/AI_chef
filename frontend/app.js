@@ -115,10 +115,11 @@
 
   function renderMenu() {
     el.menu.innerHTML = "";
+    const search = window.location.search || "";
     for (const item of menuItems) {
       const link = document.createElement("a");
       link.className = `menu-item${item.active ? " active" : ""}`;
-      link.href = item.href;
+      link.href = `${item.href}${search}`;
       link.innerHTML = `<span class="menu-icon">${item.icon}</span><span>${item.label}</span>`;
       el.menu.appendChild(link);
     }
