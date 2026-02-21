@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AiCal Notes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="notes">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <nav class="menu" id="menu"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
+        <h1 class="title">AiCal</h1>
+        <div class="header-user">
+          <div class="user-card">
+            <div class="avatar" id="userAvatar">ID</div>
+            <div class="user-text">
+              <div class="name" id="userName">Mr/Ms @username</div>
+              <div class="id" id="userId"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="page-card">
+        <div class="page-title">Заметки</div>
+        <form class="page-form" id="noteForm">
+          <input type="text" id="noteTitle" placeholder="Заголовок заметки" required />
+          <textarea id="noteContent" placeholder="Текст заметки" rows="4" required></textarea>
+          <button type="submit" class="primary-btn">Создать</button>
+        </form>
+        <div class="page-status" id="noteStatus"></div>
+        <div class="page-list" id="noteList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script src="notes.js"></script>
+</body>
+</html>
