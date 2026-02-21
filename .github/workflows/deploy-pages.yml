@@ -5,9 +5,6 @@ on:
     branches:
       - main
       - master
-    paths:
-      - ".github/workflows/deploy-pages.yml"
-      - "frontend/**"
   workflow_dispatch:
 
 permissions:
@@ -26,16 +23,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build static site
+      - name: Validate frontend static folder
         shell: bash
         run: |
           set -euo pipefail
-
-          rm -rf dist
-          mkdir -p dist
-
-          # Disable Jekyll processing
-          touch dist/.nojekyll
 
           FRONT_STATIC_DIR="frontend/src/main/resources/static"
           if [ ! -d "${FRONT_STATIC_DIR}" ]; then
@@ -48,36 +39,7 @@ jobs:
             exit 1
           fi
 
-          # Frontend (HTML/CSS/JS) from frontend module
-          cp -R "${FRONT_STATIC_DIR}/"* dist/
-
-          # Shared static assets (optional)
-          if [ -d assets ]; then
-            mkdir -p dist/assets
-            cp -R assets/* dist/assets/
-          fi
-
-      - name: Generate public runtime config (no secrets)
-        shell: bash
-        env:
-          # Set one of these in GitHub:
-          # - Repository variable: PUBLIC_API_BASE_URL
-          # - Or repository secret: PUBLIC_API_BASE_URL
-          # Example value: https://your-backend.example.com
-          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL }}
-          PUBLIC_API_BASE_URL_SECRET: ${{ secrets.PUBLIC_API_BASE_URL }}
-        run: |
-          set -euo pipefail
-          API_BASE_URL="${PUBLIC_API_BASE_URL_SECRET:-$PUBLIC_API_BASE_URL}"
-          API_BASE_URL_TRIMMED="$(printf '%s' "${API_BASE_URL}" | tr -d '\r' | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
-          if [ -n "${API_BASE_URL_TRIMMED}" ]; then
-            export API_BASE_URL="${API_BASE_URL_TRIMMED}"
-            python3 -c "import os, json; api=(os.getenv('API_BASE_URL') or '').strip(); cfg={'apiBaseUrl': api, 'endpoints': {'tasks': ['/api/miniapp/tasks'], 'notes': ['/api/miniapp/notes']}}; print('window.__APP_CONFIG__ = ' + json.dumps(cfg) + ';')" > dist/config.js
-            echo "Public config generated: apiBaseUrl=${API_BASE_URL_TRIMMED}"
-          else
-            echo "PUBLIC_API_BASE_URL is not set; keeping existing dist/config.js from frontend module static."
-            echo "Add it in GitHub: Settings -> Secrets and variables -> Actions -> Variables (or Secrets)."
-          fi
+          echo "Frontend static dir is valid: ${FRONT_STATIC_DIR}"
 
       - name: Configure Pages
         id: configure_pages
@@ -95,7 +57,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: frontend/src/main/resources/static
 
   deploy:
     needs: build
