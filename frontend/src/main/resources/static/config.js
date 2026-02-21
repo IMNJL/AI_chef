@@ -1,6 +1,7 @@
 window.__APP_CONFIG__ = {
-  apiBaseUrl: "https://imnjl.github.io/AI_chef/",
+  apiBaseUrl: "http://localhost:8010",
   endpoints: {
+    meetings: ["/api/miniapp/meetings"],
     tasks: ["/api/miniapp/tasks"],
     notes: ["/api/miniapp/notes"]
   }

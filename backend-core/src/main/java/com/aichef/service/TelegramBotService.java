@@ -42,12 +42,15 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,8 +133,9 @@ public class TelegramBotService {
                 .orElseGet(() -> {
                     User newUser = new User();
                     newUser.setTelegramId(chatId);
-                    log.info("Create new user for chatId={}", chatId);
-                    return userRepository.save(newUser);
+                    User saved = userRepository.save(newUser);
+                    logRegistration(saved);
+                    return saved;
                 });
 
         SourceType sourceType;
@@ -1615,6 +1619,22 @@ public class TelegramBotService {
         }
     }
 
+    private void logRegistration(User user) {
+        if (user == null) {
+            return;
+        }
+        String who;
+        if (user.getGender() == null) {
+            who = "молодой человек";
+        } else {
+            who = switch (user.getGender()) {
+                case FEMALE -> "девушка";
+                case MALE, UNKNOWN -> "молодой человек";
+            };
+        }
+        log.info("человек зарегистрировался: id = {}, {}", user.getId(), who);
+    }
+
     private void sendPinnedMiniAppLink(Long chatId) {
         String miniAppUrl = buildMiniAppUrl();
         if (miniAppUrl == null || miniAppUrl.isBlank() || !isHttpsUrl(miniAppUrl)) {
@@ -1709,14 +1729,52 @@ public class TelegramBotService {
     }
 
     private String buildVoiceFailureMessage(Exception error) {
-        String message = error == null ? "" : Objects.toString(error.getMessage(), "").toLowerCase();
+        String message = collectErrorText(error);
         if (message.contains("checksum") || message.contains("whisper model download")) {
             return "Не удалось распознать голос: локальная модель Whisper не скачалась корректно. "
                     + "Проверьте сеть к openaipublic.azureedge.net или задайте локальный файл через APP_WHISPER_MODEL.";
+        }
+        if (message.contains("ffmpeg is not installed") || message.contains("no such file or directory: 'ffmpeg'")) {
+            return "Не удалось распознать голос: в системе не найден ffmpeg. Установите ffmpeg и перезапустите сервис.";
+        }
+        if (message.contains("whisper cli is not installed")
+                || message.contains("command not found: whisper")
+                || message.contains("app_whisper_command")) {
+            return "Не удалось распознать голос: не найден Whisper CLI. "
+                    + "Установите whisper или задайте корректный APP_WHISPER_COMMAND, затем перезапустите сервис.";
         }
         if (message.contains("vosk stt failed")) {
             return "Не удалось распознать голос через Vosk. Проверьте APP_VOSK_MODEL_PATH и модель.";
         }
         return "Не удалось распознать голос. Проверьте локальные движки STT (Vosk/Whisper) и попробуйте еще раз.";
+    }
+
+    private String collectErrorText(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+
+        StringBuilder all = new StringBuilder();
+        ArrayDeque<Throwable> queue = new ArrayDeque<>();
+        Set<Throwable> visited = new HashSet<>();
+        queue.add(error);
+        while (!queue.isEmpty()) {
+            Throwable current = queue.removeFirst();
+            if (current == null || !visited.add(current)) {
+                continue;
+            }
+
+            all.append(' ').append(Objects.toString(current.getMessage(), ""));
+            Throwable cause = current.getCause();
+            if (cause != null) {
+                queue.addLast(cause);
+            }
+            for (Throwable suppressed : current.getSuppressed()) {
+                if (suppressed != null) {
+                    queue.addLast(suppressed);
+                }
+            }
+        }
+        return all.toString().toLowerCase(Locale.ROOT);
     }
 }

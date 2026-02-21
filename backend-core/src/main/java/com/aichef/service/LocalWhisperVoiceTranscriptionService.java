@@ -103,6 +103,12 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
             CommandResult firstAttempt = runWhisper(cmd, workDir, model, modelCachePath);
             logModelCacheStatus("after_run", model, modelCachePath);
             if (firstAttempt.exitCode() != 0) {
+                if (isCommandNotFound(firstAttempt.stderr())) {
+                    throw new IllegalStateException(
+                            "Whisper CLI is not installed or not available in PATH. "
+                                    + "Install it or set APP_WHISPER_COMMAND to a valid executable."
+                    );
+                }
                 if (isModelChecksumMismatch(firstAttempt.stderr())) {
                     clearCachedModel(model);
                     log.warn("Corrupted Whisper cache detected for model={}, retrying transcription once.", model);
@@ -110,6 +116,12 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
                     CommandResult secondAttempt = runWhisper(cmd, workDir, model, modelCachePath);
                     logModelCacheStatus("after_retry", model, modelCachePath);
                     if (secondAttempt.exitCode() != 0) {
+                        if (isCommandNotFound(secondAttempt.stderr())) {
+                            throw new IllegalStateException(
+                                    "Whisper CLI is not installed or not available in PATH. "
+                                            + "Install it or set APP_WHISPER_COMMAND to a valid executable."
+                            );
+                        }
                         blockedUntilEpochSec = (System.currentTimeMillis() / 1000) + DOWNLOAD_ERROR_COOLDOWN_SEC;
                         throw new IllegalStateException("Whisper command failed after cache reset. stderr="
                                 + secondAttempt.stderr() + ", stdout=" + secondAttempt.stdout());
@@ -239,6 +251,14 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
         }
         String msg = stderr.toLowerCase(Locale.ROOT);
         return msg.contains("sha256 checksum does not match");
+    }
+
+    private boolean isCommandNotFound(String stderr) {
+        if (stderr == null || stderr.isBlank()) {
+            return false;
+        }
+        String msg = stderr.toLowerCase(Locale.ROOT);
+        return msg.contains("command not found");
     }
 
     private void clearCachedModel(String model) {

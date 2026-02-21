@@ -18,7 +18,8 @@ public class FallbackVoiceTranscriptionService implements VoiceTranscriptionServ
 
     @Override
     public VoiceTranscriptionResult transcribe(String fileId, String mimeType, Integer durationSec) {
-        Exception localError = null;
+        Exception voskError = null;
+        Exception whisperError = null;
 
         if (aiProperties.hasVoskModelPath()) {
             try {
@@ -26,9 +27,8 @@ public class FallbackVoiceTranscriptionService implements VoiceTranscriptionServ
                 log.info("STT engine=Vosk fileId={}", fileId);
                 return result;
             } catch (Exception e) {
-                localError = e;
-                // If Vosk is configured, prefer fast-fail instead of long fallback chain.
-                throw new IllegalStateException("Vosk STT failed.", e);
+                voskError = e;
+                log.warn("Vosk STT failed, trying next configured engine. fileId={}, error={}", fileId, e.getMessage());
             }
         }
 
@@ -38,13 +38,18 @@ public class FallbackVoiceTranscriptionService implements VoiceTranscriptionServ
                 log.info("STT engine=Whisper fileId={}", fileId);
                 return result;
             } catch (Exception e) {
-                localError = e;
+                whisperError = e;
                 log.warn("Whisper STT failed. error={}", e.getMessage());
             }
         }
 
-        if (localError != null) {
-            throw new IllegalStateException("Voice transcription failed in all configured engines.", localError);
+        if (voskError != null || whisperError != null) {
+            if (whisperError != null && voskError != null) {
+                whisperError.addSuppressed(voskError);
+                throw new IllegalStateException("Voice transcription failed in all configured engines.", whisperError);
+            }
+            Exception primary = whisperError != null ? whisperError : voskError;
+            throw new IllegalStateException("Voice transcription failed in all configured engines.", primary);
         }
         throw new IllegalStateException("Voice transcription is unavailable. Configure APP_VOSK_MODEL_PATH or APP_WHISPER_COMMAND.");
     }

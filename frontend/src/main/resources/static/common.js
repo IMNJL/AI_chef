@@ -50,7 +50,7 @@
     }
   }
 
-  function hydrateUser() {
+  async function hydrateUser() {
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg && typeof tg.ready === "function") {
       try {
@@ -67,10 +67,15 @@
     const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
-      el.userName.textContent = `Mr/Ms ${displayName}`;
+      el.userName.textContent = `Mr ${displayName}`;
     }
     if (el.userId) {
       el.userId.textContent = "";
+    }
+
+    const resolvedPrefix = await resolveTitlePrefix();
+    if (resolvedPrefix && el.userName) {
+      el.userName.textContent = `${resolvedPrefix} ${displayName}`;
     }
 
     if (!el.userAvatar) return;
@@ -100,6 +105,31 @@
     } catch {
       return "";
     }
+  }
+
+  async function resolveTitlePrefix() {
+    const auth = buildAuth();
+    const bases = getApiBaseCandidates();
+    for (const base of bases) {
+      try {
+        const url = new URL(base + "/api/miniapp/me");
+        if (!auth.initData && auth.telegramId) {
+          url.searchParams.set("telegramId", auth.telegramId);
+        }
+        const response = await fetch(url.toString(), { headers: auth.headers });
+        if (!response.ok) {
+          continue;
+        }
+        const data = await response.json().catch(() => null);
+        const prefix = data && typeof data.titlePrefix === "string" ? data.titlePrefix.trim() : "";
+        if (prefix === "Mr" || prefix === "Ms") {
+          return prefix;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return "";
   }
 
   window.AiCalCommon = {
@@ -143,7 +173,8 @@
   function buildAuth() {
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
-    const telegramId = getTelegramIdFromUrl();
+    const unsafeUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
+    const telegramId = unsafeUser && unsafeUser.id ? String(unsafeUser.id) : getTelegramIdFromUrl();
     const headers = {};
     if (initData) {
       headers["X-Telegram-Init-Data"] = initData;
