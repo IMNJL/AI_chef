@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     telegram_id BIGINT NOT NULL UNIQUE,
-    timezone TEXT NOT NULL DEFAULT 'UTC',
+    timezone TEXT NOT NULL DEFAULT 'Europe/Moscow',
     locale TEXT NOT NULL DEFAULT 'ru',
     created_at TIMESTAMP NOT NULL DEFAULT now(),
     updated_at TIMESTAMP NOT NULL DEFAULT now()
@@ -26,6 +26,15 @@ CREATE TABLE event_creation_sessions (
     meeting_time TIME NULL,
     meeting_title TEXT NULL,
     duration_minutes INTEGER NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE TABLE note_edit_sessions (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    step TEXT NOT NULL CHECK (step IN ('WAIT_NOTE_NUMBER', 'WAIT_NEW_TEXT')),
+    mode TEXT NOT NULL DEFAULT 'EDIT' CHECK (mode IN ('EDIT', 'DELETE')),
+    target_note_id UUID NULL,
+    target_note_number INTEGER NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
 

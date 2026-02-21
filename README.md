@@ -1,20 +1,27 @@
 # AI_chef
 
-## Project docs
-- Architecture: `docs/architecture.md`
-- Multi-agent prompts: `docs/agents-prompts.md`
-- ER diagram: `docs/er-diagram.md`
-- SQL schema (PostgreSQL): `db/schema.sql`
+## Modules
+- `backend` — Spring Boot API + bot logic + DB integration
+- `frontend` — отдельный Spring Boot модуль, который отдает UI по HTTP
+- `frontend_dir` — исходники UI (HTML/CSS/JS), отдаются модулем `frontend` по HTTP
 
-## Spring Boot backend
-- Java: `21`
-- Build: `mvn`
-- Config: `.env` (see `.env.example`)
-
-Run:
+## Run Backend
 ```bash
-mvn -U -Dmaven.test.skip=true spring-boot:run
+mvn -pl backend spring-boot:run
 ```
+Backend URL: `http://localhost:8010`
+Swagger: `http://localhost:8010/swagger-ui.html`
 
-Webhook endpoint:
-- `${APP_PUBLIC_BASE_URL}${TELEGRAM_WEBHOOK_PATH}`
+## Run Frontend
+```bash
+mvn -pl frontend spring-boot:run
+```
+Frontend URL: `http://localhost:5173`
+Tasks page: `http://localhost:5173/tasks.html?telegramId=<YOUR_ID>`
+Notes page: `http://localhost:5173/notes.html?telegramId=<YOUR_ID>`
+
+## HTTP Integration
+Frontend calls backend over HTTP using:
+`frontend_dir/config.js`
+
+Default backend API base: `http://localhost:8010`

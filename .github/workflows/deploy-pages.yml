@@ -1,0 +1,71 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate frontend static folder
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FRONT_STATIC_DIR="frontend/src/main/resources/static"
+          if [ ! -d "${FRONT_STATIC_DIR}" ]; then
+            echo "Frontend static dir not found: ${FRONT_STATIC_DIR}"
+            exit 1
+          fi
+
+          if [ ! -f "${FRONT_STATIC_DIR}/index.html" ]; then
+            echo "index.html not found in ${FRONT_STATIC_DIR}"
+            exit 1
+          fi
+
+          echo "Frontend static dir is valid: ${FRONT_STATIC_DIR}"
+
+      - name: Configure Pages
+        id: configure_pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Hint (enable Pages)
+        if: steps.configure_pages.outcome != 'success'
+        shell: bash
+        run: |
+          echo "GitHub Pages is not enabled or Actions lacks permission to access it."
+          echo "Enable it in: Settings -> Pages -> Source: GitHub Actions."
+          echo "Also check: Settings -> Actions -> General -> Workflow permissions -> Read and write permissions."
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/src/main/resources/static
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

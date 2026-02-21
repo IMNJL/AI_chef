@@ -1,5 +1,11 @@
 /target/
+/dist/
 /.idea/
 *.iml
 .DS_Store
 .env
+.dist/
+.mvn/
+.vscode/
+
+*/target/*

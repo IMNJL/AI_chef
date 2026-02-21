@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AiCal Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="tasks">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <nav class="menu" id="menu"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
+        <h1 class="title">AiCal</h1>
+        <div class="header-user">
+          <div class="user-card">
+            <div class="avatar" id="userAvatar">ID</div>
+            <div class="user-text">
+              <div class="name" id="userName">Mr/Ms @username</div>
+              <div class="id" id="userId"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="page-card">
+        <div class="page-title-row">
+          <div class="page-title">Задачи</div>
+          <button class="fab-btn" id="taskAddBtn" type="button" aria-label="Добавить задачу">+</button>
+        </div>
+        <div class="page-status" id="taskStatus"></div>
+        <div class="page-list" id="taskList"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal hidden" id="taskModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title">Новая задача</div>
+        <button type="button" class="modal-close" id="taskModalClose">✕</button>
+      </div>
+      <form class="page-form" id="taskForm">
+        <input type="text" id="taskTitle" placeholder="Новая задача" required />
+        <select id="taskPriority">
+          <option value="LOW">Low</option>
+          <option value="MEDIUM" selected>Medium</option>
+          <option value="HIGH">High</option>
+          <option value="CRITICAL">Critical</option>
+        </select>
+        <input type="datetime-local" id="taskDueAt" />
+        <button type="submit" class="primary-btn">Создать</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script src="tasks.js"></script>
+</body>
+</html>
