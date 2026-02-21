@@ -90,6 +90,12 @@
       const data = await response.json().catch(() => null);
       return { success: true, status: response.status, data };
     } catch {
+      if (window.location.protocol === "https:" && String(base).startsWith("http://")) {
+        return {
+          success: false,
+          message: "Ошибка сети: страница открыта по HTTPS, а API указан по HTTP. Нужен HTTPS API URL."
+        };
+      }
       return { success: false, message: "Ошибка сети" };
     }
   }
@@ -106,6 +112,10 @@
           const res = await request(path, variant, base);
           if (res.success) return res;
           lastError = res;
+          if (res.status == null) {
+            // Network/CORS error on this base, try next candidate base.
+            continue;
+          }
           if (res.status !== 404 && res.status !== 405) {
             return res;
           }

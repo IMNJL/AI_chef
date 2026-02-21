@@ -7,6 +7,7 @@ import com.aichef.domain.model.User;
 import com.aichef.repository.CalendarDayRepository;
 import com.aichef.repository.TaskItemRepository;
 import com.aichef.service.MiniAppAuthService;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -88,7 +89,7 @@ public class MiniAppTaskController {
 
         TaskItem task = new TaskItem();
         task.setCalendarDay(calendarDay);
-        task.setTitle(request.title().trim());
+        task.setTitle(TextNormalization.normalizeRussian(request.title().trim()));
         task.setDueAt(dueAt);
         task.setCompleted(false);
         task.setPriority(resolvePriority(request.priority()));
@@ -116,7 +117,7 @@ public class MiniAppTaskController {
         }
 
         if (request.title() != null) {
-            String title = request.title().trim();
+            String title = TextNormalization.normalizeRussian(request.title().trim());
             if (!title.isBlank()) {
                 task.setTitle(title);
             }
@@ -195,7 +196,7 @@ public class MiniAppTaskController {
         public static TaskDto from(TaskItem task) {
             return new TaskDto(
                     task.getId(),
-                    task.getTitle(),
+                    TextNormalization.normalizeRussian(task.getTitle()),
                     task.getPriority() == null ? "MEDIUM" : task.getPriority().name(),
                     task.isCompleted(),
                     task.getDueAt()

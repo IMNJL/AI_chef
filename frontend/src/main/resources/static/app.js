@@ -61,7 +61,7 @@
 
   }
 
-  function hydrateUser() {
+  async function hydrateUser() {
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg && typeof tg.ready === "function") {
       try {
@@ -78,10 +78,15 @@
     const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
-      el.userName.textContent = `Mr/Ms ${displayName}`;
+      el.userName.textContent = `Mr ${displayName}`;
     }
     if (el.userId) {
       el.userId.textContent = "";
+    }
+
+    const resolvedPrefix = await resolveTitlePrefix();
+    if (resolvedPrefix && el.userName) {
+      el.userName.textContent = `${resolvedPrefix} ${displayName}`;
     }
 
     if (!el.userAvatar) return;
@@ -111,6 +116,94 @@
     } catch {
       return "";
     }
+  }
+
+  function getApiBaseUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const queryBase = (params.get("apiBaseUrl") || "").trim();
+    if (queryBase) {
+      try {
+        localStorage.setItem("aical_api_base", queryBase);
+      } catch {
+        // ignore
+      }
+      return queryBase.replace(/\/+$/, "");
+    }
+
+    const cfgBase = window.__APP_CONFIG__ && typeof window.__APP_CONFIG__.apiBaseUrl === "string"
+      ? window.__APP_CONFIG__.apiBaseUrl.trim()
+      : "";
+    if (cfgBase) {
+      return cfgBase.replace(/\/+$/, "");
+    }
+
+    try {
+      const saved = (localStorage.getItem("aical_api_base") || "").trim();
+      if (saved) {
+        return saved.replace(/\/+$/, "");
+      }
+    } catch {
+      // ignore
+    }
+
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  function getApiBaseCandidates() {
+    const protocol = window.location.protocol || "http:";
+    const host = window.location.hostname || "";
+    const list = [getApiBaseUrl()];
+
+    if (host) {
+      list.push(`${protocol}//${host}:8011`);
+      list.push(`${protocol}//${host}:8010`);
+      list.push(`${protocol}//${host}:8080`);
+    }
+    list.push("http://localhost:8011");
+    list.push("http://127.0.0.1:8011");
+    list.push("http://localhost:8010");
+    list.push("http://127.0.0.1:8010");
+    list.push("http://localhost:8080");
+    list.push("http://127.0.0.1:8080");
+
+    return Array.from(new Set(list.map((x) => String(x || "").trim().replace(/\/+$/, "")).filter(Boolean)));
+  }
+
+  function buildAuth() {
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
+    const unsafeUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
+    const telegramId = unsafeUser && unsafeUser.id ? String(unsafeUser.id) : getTelegramIdFromUrl();
+    const headers = {};
+    if (initData) {
+      headers["X-Telegram-Init-Data"] = initData;
+    }
+    return { headers, initData, telegramId };
+  }
+
+  async function resolveTitlePrefix() {
+    const auth = buildAuth();
+    const bases = getApiBaseCandidates();
+    for (const base of bases) {
+      try {
+        const url = new URL(base + "/api/miniapp/me");
+        if (!auth.initData && auth.telegramId) {
+          url.searchParams.set("telegramId", auth.telegramId);
+        }
+        const response = await fetch(url.toString(), { headers: auth.headers });
+        if (!response.ok) {
+          continue;
+        }
+        const data = await response.json().catch(() => null);
+        const prefix = data && typeof data.titlePrefix === "string" ? data.titlePrefix.trim() : "";
+        if (prefix === "Mr" || prefix === "Ms") {
+          return prefix;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return "";
   }
 
   function renderMenu() {

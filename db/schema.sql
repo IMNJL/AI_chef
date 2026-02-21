@@ -4,6 +4,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     telegram_id BIGINT NOT NULL UNIQUE,
+    gender TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK (gender IN ('MALE', 'FEMALE', 'UNKNOWN')),
     timezone TEXT NOT NULL DEFAULT 'Europe/Moscow',
     locale TEXT NOT NULL DEFAULT 'ru',
     created_at TIMESTAMP NOT NULL DEFAULT now(),

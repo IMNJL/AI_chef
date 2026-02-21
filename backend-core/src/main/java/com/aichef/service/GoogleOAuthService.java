@@ -106,7 +106,9 @@ public class GoogleOAuthService {
                 .orElseGet(() -> {
                     User u = new User();
                     u.setTelegramId(telegramId);
-                    return userRepository.save(u);
+                    User saved = userRepository.save(u);
+                    logRegistration(saved);
+                    return saved;
                 });
 
         TokenResponse tokenResponse = exchangeCodeForToken(code);
@@ -137,6 +139,22 @@ public class GoogleOAuthService {
                 true,
                 "Google Calendar connected: " + (email == null ? "unknown email" : email)
         );
+    }
+
+    private void logRegistration(User user) {
+        if (user == null) {
+            return;
+        }
+        String who;
+        if (user.getGender() == null) {
+            who = "молодой человек";
+        } else {
+            who = switch (user.getGender()) {
+                case FEMALE -> "девушка";
+                case MALE, UNKNOWN -> "молодой человек";
+            };
+        }
+        log.info("человек зарегистрировался: id = {}, {}", user.getId(), who);
     }
 
     public boolean isConnected(User user) {

@@ -19,12 +19,29 @@ public class MiniAppWebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         String origin = resolveOrigin(miniappPublicUrl);
-        if (origin == null && !allowInsecure) {
+        if (allowInsecure) {
+            registry.addMapping("/api/miniapp/**")
+                    .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
+                    .allowedHeaders("*")
+                    .allowedOriginPatterns(
+                            "http://localhost:*",
+                            "http://127.0.0.1:*",
+                            "http://0.0.0.0:*",
+                            "https://localhost:*",
+                            "https://127.0.0.1:*"
+                    )
+                    .allowCredentials(false);
             return;
         }
+
+        if (origin == null) {
+            return;
+        }
+
         registry.addMapping("/api/miniapp/**")
                 .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
-                .allowedOrigins(origin == null ? "*" : origin)
+                .allowedHeaders("*")
+                .allowedOrigins(origin)
                 .allowCredentials(false);
     }
 
