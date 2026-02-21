@@ -5,8 +5,9 @@ on:
     branches:
       - main
       - master
-      - frontend
-      - miniapp
+    paths:
+      - ".github/workflows/deploy-pages.yml"
+      - "frontend/**"
   workflow_dispatch:
 
 permissions:
@@ -36,8 +37,19 @@ jobs:
           # Disable Jekyll processing
           touch dist/.nojekyll
 
-          # Frontend (HTML/CSS/JS)
-          cp -R frontend/* dist/
+          FRONT_STATIC_DIR="frontend/src/main/resources/static"
+          if [ ! -d "${FRONT_STATIC_DIR}" ]; then
+            echo "Frontend static dir not found: ${FRONT_STATIC_DIR}"
+            exit 1
+          fi
+
+          if [ ! -f "${FRONT_STATIC_DIR}/index.html" ]; then
+            echo "index.html not found in ${FRONT_STATIC_DIR}"
+            exit 1
+          fi
+
+          # Frontend (HTML/CSS/JS) from frontend module
+          cp -R "${FRONT_STATIC_DIR}/"* dist/
 
           # Shared static assets (optional)
           if [ -d assets ]; then
@@ -60,10 +72,10 @@ jobs:
           API_BASE_URL_TRIMMED="$(printf '%s' "${API_BASE_URL}" | tr -d '\r' | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//')"
           if [ -n "${API_BASE_URL_TRIMMED}" ]; then
             export API_BASE_URL="${API_BASE_URL_TRIMMED}"
-            python3 -c "import os, json; api=(os.getenv('API_BASE_URL') or '').strip(); print('window.__APP_CONFIG__ = ' + json.dumps({'apiBaseUrl': api}) + ';')" > dist/config.js
+            python3 -c "import os, json; api=(os.getenv('API_BASE_URL') or '').strip(); cfg={'apiBaseUrl': api, 'endpoints': {'tasks': ['/api/miniapp/tasks'], 'notes': ['/api/miniapp/notes']}}; print('window.__APP_CONFIG__ = ' + json.dumps(cfg) + ';')" > dist/config.js
             echo "Public config generated: apiBaseUrl=${API_BASE_URL_TRIMMED}"
           else
-            echo "PUBLIC_API_BASE_URL is not set; keeping existing dist/config.js from frontend/ (apiBaseUrl as committed)."
+            echo "PUBLIC_API_BASE_URL is not set; keeping existing dist/config.js from frontend module static."
             echo "Add it in GitHub: Settings -> Secrets and variables -> Actions -> Variables (or Secrets)."
           fi
 
