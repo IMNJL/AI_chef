@@ -4,6 +4,7 @@ import com.aichef.domain.model.Note;
 import com.aichef.domain.model.User;
 import com.aichef.repository.NoteRepository;
 import com.aichef.service.MiniAppAuthService;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -58,8 +59,8 @@ public class MiniAppNoteController {
 
         Note note = new Note();
         note.setUser(userOpt.get());
-        note.setTitle(request.title().trim());
-        note.setContent(request.content().trim());
+        note.setTitle(TextNormalization.normalizeRussian(request.title().trim()));
+        note.setContent(TextNormalization.normalizeRussian(request.content().trim()));
         note.setArchived(false);
         noteRepository.save(note);
 
@@ -78,8 +79,8 @@ public class MiniAppNoteController {
         public static NoteDto from(Note note) {
             return new NoteDto(
                     note.getId(),
-                    note.getTitle(),
-                    note.getContent(),
+                    TextNormalization.normalizeRussian(note.getTitle()),
+                    TextNormalization.normalizeRussian(note.getContent()),
                     note.getUpdatedAt()
             );
         }

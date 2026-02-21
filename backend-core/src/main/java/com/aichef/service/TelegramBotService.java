@@ -26,6 +26,7 @@ import com.aichef.repository.NoteEditSessionRepository;
 import com.aichef.repository.NotificationRepository;
 import com.aichef.repository.TaskItemRepository;
 import com.aichef.repository.UserRepository;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -557,8 +558,8 @@ public class TelegramBotService {
         if (intent.action() == BotAction.CREATE_NOTE) {
             Note note = new Note();
             note.setUser(user);
-            note.setTitle(intent.title() == null ? "Заметка" : intent.title());
-            note.setContent(intent.noteContent() == null ? "" : intent.noteContent());
+            note.setTitle(TextNormalization.normalizeRussian(intent.title() == null ? "Заметка" : intent.title()));
+            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? "" : intent.noteContent()));
             noteRepository.save(note);
             return "📝 Заметка сохранена.\nID: " + note.getId();
         }
@@ -571,10 +572,10 @@ public class TelegramBotService {
             if (note == null) {
                 return "Заметка не найдена. Проверьте номер в списке.";
             }
-            note.setContent(intent.noteContent() == null ? note.getContent() : intent.noteContent());
+            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? note.getContent() : intent.noteContent()));
             if (intent.noteContent() != null && !intent.noteContent().isBlank()) {
                 String newTitle = intent.noteContent().length() > 70 ? intent.noteContent().substring(0, 70) : intent.noteContent();
-                note.setTitle(newTitle);
+                note.setTitle(TextNormalization.normalizeRussian(newTitle));
             }
             noteRepository.save(note);
             return "📝 Заметка обновлена: №" + resolveNoteNumber(user, note);
@@ -614,7 +615,7 @@ public class TelegramBotService {
             TaskItem taskItem = new TaskItem();
             taskItem.setCalendarDay(day);
             taskItem.setInboundItem(inboundItem);
-            taskItem.setTitle(intent.title());
+            taskItem.setTitle(TextNormalization.normalizeRussian(intent.title()));
             taskItem.setPriority(intent.priority() == null ? PriorityLevel.MEDIUM : intent.priority());
             taskItem.setDueAt(intent.dueAt());
             taskItemRepository.save(taskItem);
@@ -661,7 +662,7 @@ public class TelegramBotService {
         Meeting meeting = new Meeting();
         meeting.setCalendarDay(day);
         meeting.setInboundItem(inboundItem);
-        String cleanedTitle = stripCreateCommandPhrases(title);
+        String cleanedTitle = TextNormalization.normalizeRussian(stripCreateCommandPhrases(title));
         meeting.setTitle(cleanedTitle == null || cleanedTitle.isBlank() ? "Событие" : cleanedTitle);
         meeting.setStartsAt(startsAt);
         meeting.setEndsAt(endsAt);
