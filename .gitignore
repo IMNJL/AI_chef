@@ -7,3 +7,5 @@
 .dist/
 .mvn/
 .vscode/
+
+*/target/*
