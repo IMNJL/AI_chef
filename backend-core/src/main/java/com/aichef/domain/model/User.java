@@ -31,7 +31,6 @@ public class User extends BaseEntity {
     private String locale = "ru";
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "gender", nullable = false)
+    @Column(name = "gender")
     private Gender gender = Gender.UNKNOWN;
 }
-
