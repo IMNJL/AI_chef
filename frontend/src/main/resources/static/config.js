@@ -1,5 +1,5 @@
 window.__APP_CONFIG__ = {
-  apiBaseUrl: "http://localhost:8010",
+  apiBaseUrl: "",
   endpoints: {
     meetings: ["/api/miniapp/meetings"],
     tasks: ["/api/miniapp/tasks"],

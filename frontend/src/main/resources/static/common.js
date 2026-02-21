@@ -188,9 +188,12 @@
     const list = [getApiBaseUrl()];
 
     if (host) {
+      list.push(`${protocol}//${host}:8011`);
       list.push(`${protocol}//${host}:8010`);
       list.push(`${protocol}//${host}:8080`);
     }
+    list.push("http://localhost:8011");
+    list.push("http://127.0.0.1:8011");
     list.push("http://localhost:8010");
     list.push("http://127.0.0.1:8010");
     list.push("http://localhost:8080");

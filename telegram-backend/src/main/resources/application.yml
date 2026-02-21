@@ -40,7 +40,7 @@ logging:
 
 app:
   miniapp:
-    public-url: ${MINIAPP_PUBLIC_URL:https://imnjl.github.io/AI_chef/}
+    public-url: ${MINIAPP_PUBLIC_URL:http://localhost:5174/}
     allow-insecure: ${MINIAPP_ALLOW_INSECURE:true}
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN}
