@@ -34,7 +34,6 @@ springdoc:
     path: /swagger-ui.html
     operationsSorter: method
 
-
 logging:
   level:
     com.aichef: ${APP_LOG_LEVEL:INFO}
