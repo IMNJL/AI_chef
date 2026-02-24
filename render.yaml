@@ -94,10 +94,14 @@ services:
       - key: GOOGLE_REFRESH_TOKEN
         sync: false
       - key: APP_WHISPER_COMMAND
-        value: '/opt/venv/bin/whisper {input} --model {model} --language Russian --output_format txt --output_dir {output_dir} --fp16 False'
+        value: ""
       - key: APP_WHISPER_MODEL
-        value: small
+        value: ""
+      - key: APP_VOSK_PYTHON
+        value: /opt/venv/bin/python
       - key: APP_VOSK_MODEL_PATH
+        value: /opt/models/vosk-model-small-ru-0.22
+      - key: APP_WHISPER_FALLBACK_MODEL
         value: ""
 
   - type: web
