@@ -24,9 +24,7 @@ services:
       - key: MINIAPP_PUBLIC_URL
         sync: false
       - key: SPRING_DATASOURCE_URL
-        fromDatabase:
-          name: aichef-db
-          property: connectionString
+        sync: false
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: aichef-db
@@ -76,9 +74,7 @@ services:
       - key: MINIAPP_ALLOW_INSECURE
         value: "true"
       - key: SPRING_DATASOURCE_URL
-        fromDatabase:
-          name: aichef-db
-          property: connectionString
+        sync: false
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: aichef-db
@@ -98,7 +94,9 @@ services:
       - key: GOOGLE_REFRESH_TOKEN
         sync: false
       - key: APP_WHISPER_COMMAND
-        value: ""
+        value: '/opt/venv/bin/whisper {input} --model {model} --language Russian --output_format txt --output_dir {output_dir} --fp16 False'
+      - key: APP_WHISPER_MODEL
+        value: small
       - key: APP_VOSK_MODEL_PATH
         value: ""
 

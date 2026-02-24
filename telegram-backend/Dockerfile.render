@@ -12,6 +12,15 @@ RUN mvn -pl telegram-backend -am -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip python3-venv \
+    && python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/venv/bin/pip install --no-cache-dir openai-whisper \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
 COPY --from=build /app/telegram-backend/target/telegram-backend-*.jar /app/app.jar
 
 CMD ["sh", "-c", "java -jar /app/app.jar --server.port=${PORT:-10000}"]
