@@ -206,7 +206,7 @@ public class LocalWhisperVoiceTranscriptionService implements VoiceTranscription
     }
 
     private CommandResult runWhisper(String cmd, Path workDir, String model, Path modelCachePath) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder("/bin/zsh", "-lc", cmd)
+        Process process = new ProcessBuilder("/bin/sh", "-lc", cmd)
                 .directory(workDir.toFile())
                 .start();
 
