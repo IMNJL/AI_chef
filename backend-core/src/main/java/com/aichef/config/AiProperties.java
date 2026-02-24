@@ -6,12 +6,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AiProperties(
         String ollamaBaseUrl,
         String ollamaModel,
+        String llmBaseUrl,
+        String llmApiKey,
+        String llmModel,
         String whisperCommand,
         String whisperModel,
         String whisperFallbackModel,
         String voskPython,
         String voskModelPath
 ) {
+    public boolean hasCloudLlm() {
+        return llmBaseUrl != null && !llmBaseUrl.isBlank()
+                && llmApiKey != null && !llmApiKey.isBlank()
+                && llmModel != null && !llmModel.isBlank();
+    }
+
     public boolean hasOllama() {
         return ollamaBaseUrl != null && !ollamaBaseUrl.isBlank() && ollamaModel != null && !ollamaModel.isBlank();
     }

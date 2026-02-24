@@ -106,8 +106,17 @@ public class GoogleCalendarService {
     ) {
         try {
             RestClient client = RestClient.builder().baseUrl(properties.safeApiBase()).build();
-            OffsetDateTime timeMin = from.atStartOfDay(zoneId).toOffsetDateTime();
-            OffsetDateTime timeMax = to.plusDays(1).atStartOfDay(zoneId).toOffsetDateTime();
+            String timeMin = DateTimeFormatter.ISO_INSTANT.format(from.atStartOfDay(zoneId).toInstant());
+            String timeMax = DateTimeFormatter.ISO_INSTANT.format(to.plusDays(1).atStartOfDay(zoneId).toInstant());
+            log.debug(
+                    "Google Calendar list request. calendarId={}, from={}, to={}, zone={}, timeMin={}, timeMax={}",
+                    calendarId,
+                    from,
+                    to,
+                    zoneId,
+                    timeMin,
+                    timeMax
+            );
 
             Map<?, ?> response = client.get()
                     .uri(uri -> uri
@@ -117,8 +126,8 @@ public class GoogleCalendarService {
                             .queryParam("singleEvents", true)
                             .queryParam("orderBy", "startTime")
                             .queryParam("maxResults", 2500)
-                            .queryParam("timeMin", timeMin.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-                            .queryParam("timeMax", timeMax.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                            .queryParam("timeMin", timeMin)
+                            .queryParam("timeMax", timeMax)
                             .build())
                     .header("Authorization", "Bearer " + accessToken)
                     .retrieve()

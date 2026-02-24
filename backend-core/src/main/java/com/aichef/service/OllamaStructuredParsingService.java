@@ -13,6 +13,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -23,15 +24,42 @@ public class OllamaStructuredParsingService {
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
 
+    public boolean isEnabled() {
+        return aiProperties.hasCloudLlm() || aiProperties.hasOllama();
+    }
+
     public ParsedEventData extractEventData(String text, ZoneId zoneId) {
-        if (text == null || text.isBlank() || !aiProperties.hasOllama()) {
+        if (text == null || text.isBlank()) {
+            return ParsedEventData.empty();
+        }
+        if (!isEnabled()) {
             return ParsedEventData.empty();
         }
 
         try {
-            RestClient client = RestClient.builder().baseUrl(aiProperties.ollamaBaseUrl()).build();
             String today = LocalDate.now(zoneId == null ? ZoneId.of("Europe/Moscow") : zoneId).toString();
-            String prompt = """
+            String prompt = buildPrompt(today, text);
+
+            if (aiProperties.hasCloudLlm()) {
+                ParsedEventData cloudParsed = extractViaCloudLlm(prompt);
+                if (cloudParsed.hasAnyData()) {
+                    return cloudParsed;
+                }
+                log.warn("Cloud LLM returned no structured data, trying Ollama fallback.");
+            }
+
+            if (aiProperties.hasOllama()) {
+                return extractViaOllama(prompt);
+            }
+            return ParsedEventData.empty();
+        } catch (Exception e) {
+            log.warn("Structured parse failed: {}", e.getMessage());
+            return ParsedEventData.empty();
+        }
+    }
+
+    private String buildPrompt(String today, String text) {
+        return """
                     Извлеки структуру календарного запроса.
                     Верни строго JSON, без markdown и комментариев.
                     today=%s
@@ -49,25 +77,73 @@ public class OllamaStructuredParsingService {
                     - Если нет данных, ставь null.
                     Текст: %s
                     """.formatted(today, text);
+    }
 
-            Map<String, Object> payload = Map.of(
-                    "model", aiProperties.ollamaModel(),
-                    "stream", false,
-                    "format", "json",
-                    "prompt", prompt,
-                    "options", Map.of("temperature", 0)
-            );
+    private ParsedEventData extractViaCloudLlm(String prompt) {
+        RestClient client = RestClient.builder().baseUrl(aiProperties.llmBaseUrl().trim()).build();
+        Map<String, Object> payload = Map.of(
+                "model", aiProperties.llmModel().trim(),
+                "temperature", 0,
+                "response_format", Map.of("type", "json_object"),
+                "messages", List.of(
+                        Map.of("role", "system", "content", "Ты извлекаешь структуру календарного запроса и возвращаешь только JSON."),
+                        Map.of("role", "user", "content", prompt)
+                )
+        );
 
-            Map<?, ?> response = client.post()
-                    .uri("/api/generate")
-                    .body(payload)
-                    .retrieve()
-                    .body(Map.class);
-            if (response == null || !(response.get("response") instanceof String raw) || raw.isBlank()) {
-                return ParsedEventData.empty();
-            }
+        Map<?, ?> response = client.post()
+                .uri("/v1/chat/completions")
+                .headers(headers -> headers.setBearerAuth(aiProperties.llmApiKey().trim()))
+                .body(payload)
+                .retrieve()
+                .body(Map.class);
 
-            JsonNode root = objectMapper.readTree(raw);
+        if (response == null || !(response.get("choices") instanceof List<?> choices) || choices.isEmpty()) {
+            return ParsedEventData.empty();
+        }
+        Object firstChoice = choices.get(0);
+        if (!(firstChoice instanceof Map<?, ?> choiceMap)) {
+            return ParsedEventData.empty();
+        }
+        Object messageObj = choiceMap.get("message");
+        if (!(messageObj instanceof Map<?, ?> messageMap)) {
+            return ParsedEventData.empty();
+        }
+        Object contentObj = messageMap.get("content");
+        if (!(contentObj instanceof String raw) || raw.isBlank()) {
+            return ParsedEventData.empty();
+        }
+        return parseStructuredJson(raw);
+    }
+
+    private ParsedEventData extractViaOllama(String prompt) {
+        RestClient client = RestClient.builder().baseUrl(aiProperties.ollamaBaseUrl()).build();
+        Map<String, Object> payload = Map.of(
+                "model", aiProperties.ollamaModel(),
+                "stream", false,
+                "format", "json",
+                "prompt", prompt,
+                "options", Map.of("temperature", 0)
+        );
+
+        Map<?, ?> response = client.post()
+                .uri("/api/generate")
+                .body(payload)
+                .retrieve()
+                .body(Map.class);
+        if (response == null || !(response.get("response") instanceof String raw) || raw.isBlank()) {
+            return ParsedEventData.empty();
+        }
+        return parseStructuredJson(raw);
+    }
+
+    private ParsedEventData parseStructuredJson(String raw) {
+        String json = extractJsonObject(raw);
+        if (json == null || json.isBlank()) {
+            return ParsedEventData.empty();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(json);
             String intent = textOrNull(root.get("intent"));
             String title = textOrNull(root.get("title"));
             LocalDate date = parseDate(textOrNull(root.get("date")));
@@ -75,9 +151,22 @@ public class OllamaStructuredParsingService {
             Integer duration = parseInteger(root.get("duration_minutes"));
             return new ParsedEventData(intent, title, date, time, duration);
         } catch (Exception e) {
-            log.warn("Ollama structured parse failed: {}", e.getMessage());
+            log.warn("Failed to parse structured JSON: {}", e.getMessage());
             return ParsedEventData.empty();
         }
+    }
+
+    private String extractJsonObject(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        if (start < 0 || end < 0 || end <= start) {
+            return trimmed;
+        }
+        return trimmed.substring(start, end + 1);
     }
 
     private String textOrNull(JsonNode node) {

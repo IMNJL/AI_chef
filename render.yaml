@@ -24,7 +24,9 @@ services:
       - key: MINIAPP_PUBLIC_URL
         sync: false
       - key: SPRING_DATASOURCE_URL
-        sync: false
+        fromDatabase:
+          name: aichef-db
+          property: jdbcConnectionString
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: aichef-db
@@ -33,6 +35,8 @@ services:
         fromDatabase:
           name: aichef-db
           property: password
+      - key: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+        value: org.hibernate.dialect.PostgreSQLDialect
       - key: GOOGLE_CALENDAR_ENABLED
         value: "false"
       - key: GOOGLE_CALENDAR_ID
@@ -42,6 +46,16 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: APP_OLLAMA_BASE_URL
+        sync: false
+      - key: APP_OLLAMA_MODEL
+        value: qwen2.5:3b-instruct
+      - key: APP_LLM_BASE_URL
+        sync: false
+      - key: APP_LLM_API_KEY
+        sync: false
+      - key: APP_LLM_MODEL
         sync: false
 
   - type: web
@@ -74,7 +88,9 @@ services:
       - key: MINIAPP_ALLOW_INSECURE
         value: "true"
       - key: SPRING_DATASOURCE_URL
-        sync: false
+        fromDatabase:
+          name: aichef-db
+          property: jdbcConnectionString
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: aichef-db
@@ -83,6 +99,8 @@ services:
         fromDatabase:
           name: aichef-db
           property: password
+      - key: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+        value: org.hibernate.dialect.PostgreSQLDialect
       - key: GOOGLE_CALENDAR_ENABLED
         value: "false"
       - key: GOOGLE_CALENDAR_ID
@@ -92,6 +110,16 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: APP_OLLAMA_BASE_URL
+        sync: false
+      - key: APP_OLLAMA_MODEL
+        value: qwen2.5:3b-instruct
+      - key: APP_LLM_BASE_URL
+        sync: false
+      - key: APP_LLM_API_KEY
+        sync: false
+      - key: APP_LLM_MODEL
         sync: false
       - key: APP_WHISPER_COMMAND
         value: ""

@@ -4,6 +4,7 @@ import com.aichef.domain.enums.FilterClassification;
 import com.aichef.domain.enums.InboundStatus;
 import com.aichef.domain.enums.PriorityLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MessageUnderstandingService {
@@ -145,6 +147,12 @@ public class MessageUnderstandingService {
         }
 
         OllamaStructuredParsingService.ParsedEventData llmParsed = ollamaStructuredParsingService.extractEventData(text, zoneId);
+        if (llmParsed.hasAnyData()) {
+            log.info("Qwen parse applied. intent={}, title={}, date={}, time={}, durationMinutes={}",
+                    llmParsed.intent(), llmParsed.title(), llmParsed.date(), llmParsed.time(), llmParsed.durationMinutes());
+        } else if (ollamaStructuredParsingService.isEnabled()) {
+            log.debug("Qwen parse returned no structured data for text.");
+        }
         if (llmParsed.isCreateMeetingIntent()) {
             LocalDate parsedDate = llmParsed.date();
             LocalTime parsedTime = llmParsed.time();
