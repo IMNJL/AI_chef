@@ -1752,10 +1752,31 @@ public class TelegramBotService {
             return "Не удалось распознать голос: не найден Whisper CLI. "
                     + "Установите whisper или задайте корректный APP_WHISPER_COMMAND, затем перезапустите сервис.";
         }
+        if (message.contains("vosk model path does not exist")
+                || message.contains("app_vosk_model_path is empty")
+                || message.contains("local vosk transcription failed")
+                || message.contains("scripts/vosk_transcribe.py")
+                || message.contains("no module named vosk")) {
+            return "Не удалось распознать голос через Vosk. "
+                    + "Проверьте APP_VOSK_MODEL_PATH, APP_VOSK_PYTHON и наличие scripts/vosk_transcribe.py в контейнере.";
+        }
         if (message.contains("vosk stt failed")) {
             return "Не удалось распознать голос через Vosk. Проверьте APP_VOSK_MODEL_PATH и модель.";
         }
-        return "Не удалось распознать голос. Проверьте локальные движки STT (Vosk/Whisper) и попробуйте еще раз.";
+        return "Не удалось распознать голос. Проверьте локальные движки STT (Vosk/Whisper). "
+                + "Коротко: " + compactErrorForUser(message);
+    }
+
+    private String compactErrorForUser(String message) {
+        if (message == null || message.isBlank()) {
+            return "причина не определена";
+        }
+        String normalized = message.replace('\n', ' ').replace('\r', ' ').replaceAll("\\s+", " ").trim();
+        int limit = 180;
+        if (normalized.length() <= limit) {
+            return normalized;
+        }
+        return normalized.substring(0, limit) + "...";
     }
 
     private String collectErrorText(Throwable error) {

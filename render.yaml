@@ -62,7 +62,7 @@ services:
       - key: TELEGRAM_BOT_USERNAME
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
-        generateValue: true
+        sync: false
       - key: TELEGRAM_WEBHOOK_PATH
         value: /api/telegram/webhook
       - key: TELEGRAM_API_BASE
