@@ -8,11 +8,10 @@ databases:
 services:
   - type: web
     name: aichef-miniapp-api
-    env: java
+    env: docker
     plan: free
     rootDir: .
-    buildCommand: mvn -pl miniapp-backend -am -DskipTests package
-    startCommand: sh -c 'java -jar miniapp-backend/target/miniapp-backend-*.jar --server.port=$PORT'
+    dockerfilePath: ./miniapp-backend/Dockerfile.render
     healthCheckPath: /actuator/health
     autoDeploy: true
     envVars:
@@ -49,11 +48,10 @@ services:
 
   - type: web
     name: aichef-telegram
-    env: java
+    env: docker
     plan: free
     rootDir: .
-    buildCommand: mvn -pl telegram-backend -am -DskipTests package
-    startCommand: sh -c 'java -jar telegram-backend/target/telegram-backend-*.jar --server.port=$PORT'
+    dockerfilePath: ./telegram-backend/Dockerfile.render
     healthCheckPath: /actuator/health
     autoDeploy: true
     envVars:
@@ -106,10 +104,9 @@ services:
 
   - type: web
     name: aichef-frontend
-    env: java
+    env: docker
     plan: free
     rootDir: .
-    buildCommand: mvn -pl frontend -am -DskipTests package
-    startCommand: sh -c 'java -jar frontend/target/frontend-app-*.jar --server.port=$PORT'
+    dockerfilePath: ./frontend/Dockerfile.render
     healthCheckPath: /actuator/health
     autoDeploy: true
