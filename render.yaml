@@ -21,7 +21,9 @@ services:
       - key: SPRING_JPA_HIBERNATE_DDL_AUTO
         value: update
       - key: MINIAPP_ALLOW_INSECURE
-        value: "false"
+        value: "true"
+      - key: MINIAPP_PUBLIC_URL
+        sync: false
       - key: SPRING_DATASOURCE_URL
         fromDatabase:
           name: aichef-db
@@ -69,8 +71,12 @@ services:
         value: /api/telegram/webhook
       - key: TELEGRAM_API_BASE
         value: https://api.telegram.org
+      - key: APP_PUBLIC_BASE_URL
+        sync: false
+      - key: MINIAPP_PUBLIC_URL
+        sync: false
       - key: MINIAPP_ALLOW_INSECURE
-        value: "false"
+        value: "true"
       - key: SPRING_DATASOURCE_URL
         fromDatabase:
           name: aichef-db
