@@ -28,9 +28,10 @@ public class MiniAppWebConfig implements WebMvcConfigurer {
             patterns.add("http://0.0.0.0:*");
             patterns.add("https://localhost:*");
             patterns.add("https://127.0.0.1:*");
-            // patterns.add("https://*.ngrok-free.dev");
-            // patterns.add("https://*.trycloudflare.com");
+            patterns.add("https://*.ngrok-free.dev");
+            patterns.add("https://*.trycloudflare.com");
             patterns.add("https://*.github.io");
+            patterns.add("https://*.onrender.com");
             if (origin != null) {
                 patterns.add(origin);
             }

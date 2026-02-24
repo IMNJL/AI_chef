@@ -1,0 +1,109 @@
+databases:
+  - name: aichef-db
+    plan: free
+    databaseName: aichef
+    user: aichef
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: aichef-miniapp-api
+    env: java
+    plan: free
+    rootDir: .
+    buildCommand: mvn -pl miniapp-backend -am -DskipTests package
+    startCommand: sh -c 'java -jar miniapp-backend/target/miniapp-backend-*.jar --server.port=$PORT'
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: ai-chef-miniapp
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+      - key: MINIAPP_ALLOW_INSECURE
+        value: "false"
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: aichef-db
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: aichef-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: aichef-db
+          property: password
+      - key: GOOGLE_CALENDAR_ENABLED
+        value: "false"
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+
+  - type: web
+    name: aichef-telegram
+    env: java
+    plan: free
+    rootDir: .
+    buildCommand: mvn -pl telegram-backend -am -DskipTests package
+    startCommand: sh -c 'java -jar telegram-backend/target/telegram-backend-*.jar --server.port=$PORT'
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: ai-chef-telegram
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: TELEGRAM_WEBHOOK_PATH
+        value: /api/telegram/webhook
+      - key: TELEGRAM_API_BASE
+        value: https://api.telegram.org
+      - key: MINIAPP_ALLOW_INSECURE
+        value: "false"
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: aichef-db
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: aichef-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: aichef-db
+          property: password
+      - key: GOOGLE_CALENDAR_ENABLED
+        value: "false"
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: APP_WHISPER_COMMAND
+        value: ""
+      - key: APP_VOSK_MODEL_PATH
+        value: ""
+
+  - type: web
+    name: aichef-frontend
+    env: java
+    plan: free
+    rootDir: .
+    buildCommand: mvn -pl frontend -am -DskipTests package
+    startCommand: sh -c 'java -jar frontend/target/frontend-app-*.jar --server.port=$PORT'
+    healthCheckPath: /actuator/health
+    autoDeploy: true
