@@ -1686,10 +1686,18 @@ public class TelegramBotService {
                 origin.append(":").append(port);
             }
             String path = uri.getPath();
+            String query = uri.getRawQuery();
+
+            StringBuilder result = new StringBuilder(origin);
             if (path != null && !path.isBlank() && !"/".equals(path)) {
-                return origin + path;
+                result.append(path);
+            } else {
+                result.append("/miniapp");
             }
-            return origin + "/miniapp";
+            if (query != null && !query.isBlank()) {
+                result.append("?").append(query);
+            }
+            return result.toString();
         } catch (Exception e) {
             return null;
         }

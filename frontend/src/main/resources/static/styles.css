@@ -309,6 +309,36 @@ body.sidebar-open .sidebar-backdrop {
   position: relative;
 }
 
+.meeting-pill {
+  position: absolute;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  color: #1e3a8a;
+  text-decoration: none;
+  overflow: hidden;
+}
+
+.meeting-pill-title {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meeting-pill-time {
+  font-size: 11px;
+  line-height: 1.1;
+  color: #334155;
+}
+
 .now-time-line {
   position: absolute;
   left: var(--time-col-width);

@@ -1,4 +1,6 @@
 (() => {
+  const API_REQUEST_TIMEOUT_MS = 7000;
+
   const el = {
     form: document.getElementById("noteForm"),
     title: document.getElementById("noteTitle"),
@@ -80,7 +82,11 @@
     const headers = { ...(init.headers || {}), ...auth.headers };
 
     try {
-      const response = await fetch(url.toString(), { ...init, headers });
+      const response = await fetchWithTimeout(
+        url.toString(),
+        { ...init, headers },
+        API_REQUEST_TIMEOUT_MS
+      );
       if (!response.ok) {
         return { success: false, status: response.status, message: apiErrorMessage(response.status) };
       }
@@ -102,27 +108,27 @@
 
   async function requestWithFallback(paths, variants) {
     let lastError = { success: false, message: "Ошибка API" };
+    let firstHttpError = null;
     const common = window.AiCalCommon;
     const bases = common && typeof common.getApiBaseCandidates === "function"
       ? common.getApiBaseCandidates()
       : [window.location.origin];
+
     for (const base of bases) {
       for (const path of paths) {
         for (const variant of variants) {
           const res = await request(path, variant, base);
           if (res.success) return res;
+
           lastError = res;
-          if (res.status == null) {
-            // Network/CORS error on this base, try next candidate base.
-            continue;
-          }
-          if (res.status !== 404 && res.status !== 405) {
-            return res;
+          if (res.status != null && firstHttpError == null) {
+            firstHttpError = res;
           }
         }
       }
     }
-    return lastError;
+
+    return firstHttpError || lastError;
   }
 
   function getNoteEndpoints() {
@@ -150,5 +156,15 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  async function fetchWithTimeout(resource, init, timeoutMs) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(resource, { ...init, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
   }
 })();
