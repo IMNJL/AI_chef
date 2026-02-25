@@ -42,6 +42,7 @@ app:
   miniapp:
     public-url: ${MINIAPP_PUBLIC_URL:http://localhost:5174/}
     allow-insecure: ${MINIAPP_ALLOW_INSECURE:true}
+    default-telegram-id: ${MINIAPP_DEFAULT_TELEGRAM_ID:}
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:local-miniapp-token}
     bot-username: ${TELEGRAM_BOT_USERNAME:local-miniapp-bot}

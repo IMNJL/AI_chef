@@ -240,6 +240,27 @@ public class TelegramBotService {
             return;
         }
 
+        if (hasVoice) {
+            Meeting meetingFromVoice = tryCreateMeetingFromVoice(user, rawText, zoneId, metadata);
+            if (meetingFromVoice != null) {
+                saveInboundItem(
+                        user,
+                        sourceType,
+                        rawText,
+                        fileUrl,
+                        metadata,
+                        FilterClassification.MEETING,
+                        InboundStatus.PROCESSED
+                );
+                String response = "✅ Событие создано: " + meetingFromVoice.getTitle() + "\n🕒 "
+                        + meetingFromVoice.getStartsAt().toLocalDate() + " "
+                        + meetingFromVoice.getStartsAt().toLocalTime().withSecond(0).withNano(0);
+                sendMessage(chatId, withLink(response, meetingFromVoice.getExternalLink())
+                        + buildGoogleSyncWarning(user, meetingFromVoice), true);
+                return;
+            }
+        }
+
         EventCreationSession session = eventCreationSessionRepository.findByUser(user).orElse(null);
         if (session != null) {
             if (isCancelRequest(rawText)) {
@@ -275,6 +296,53 @@ public class TelegramBotService {
         InboundItem item = saveInboundItem(user, sourceType, rawText, fileUrl, metadata, intent.classification(), intent.status());
         String response = applyIntent(user, item, intent);
         sendMessage(chatId, response, true);
+    }
+
+    private Meeting tryCreateMeetingFromVoice(User user, String rawText, ZoneId zoneId, Map<String, Object> metadata) {
+        if (rawText == null || rawText.isBlank()) {
+            return null;
+        }
+        OllamaStructuredParsingService.ParsedEventData parsed = ollamaStructuredParsingService.extractEventData(rawText, zoneId);
+        if (!parsed.isCreateMeetingIntent() || parsed.date() == null || parsed.time() == null) {
+            return null;
+        }
+
+        Integer durationMinutes = parsed.durationMinutes();
+        if (durationMinutes == null || durationMinutes <= 0) {
+            durationMinutes = parseDurationMinutes(rawText);
+        }
+        if (durationMinutes == null || durationMinutes <= 0) {
+            return null;
+        }
+
+        String title = parsed.title();
+        if (title == null || title.isBlank()) {
+            title = extractTitleFromCommand(rawText);
+        }
+        title = TextNormalization.normalizeRussian(stripCreateCommandPhrases(title == null ? "" : title));
+        if (title != null) {
+            title = title.trim();
+        }
+        if (title == null || title.isBlank()) {
+            title = "Событие";
+        }
+
+        ZoneId resolvedZone = zoneId == null ? DEFAULT_ZONE : zoneId;
+        OffsetDateTime startsAt = parsed.date()
+                .atTime(parsed.time())
+                .atZone(resolvedZone)
+                .toOffsetDateTime();
+        OffsetDateTime endsAt = startsAt.plusMinutes(durationMinutes);
+
+        if (metadata != null) {
+            metadata.put("voice_llm_intent", parsed.intent());
+            metadata.put("voice_llm_title", parsed.title());
+            metadata.put("voice_llm_date", parsed.date().toString());
+            metadata.put("voice_llm_time", parsed.time().toString());
+            metadata.put("voice_llm_duration_minutes", durationMinutes);
+        }
+
+        return createMeetingWithReminder(user, null, title, startsAt, endsAt, null, resolvedZone);
     }
 
     public void sendMessage(Long chatId, String text) {

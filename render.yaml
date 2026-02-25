@@ -21,6 +21,8 @@ services:
         value: update
       - key: MINIAPP_ALLOW_INSECURE
         value: "true"
+      - key: MINIAPP_DEFAULT_TELEGRAM_ID
+        sync: false
       - key: MINIAPP_PUBLIC_URL
         sync: false
       - key: SPRING_DATASOURCE_URL
@@ -87,6 +89,8 @@ services:
         sync: false
       - key: MINIAPP_ALLOW_INSECURE
         value: "true"
+      - key: MINIAPP_DEFAULT_TELEGRAM_ID
+        sync: false
       - key: SPRING_DATASOURCE_URL
         fromDatabase:
           name: aichef-db

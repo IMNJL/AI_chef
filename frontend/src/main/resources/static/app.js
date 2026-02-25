@@ -9,6 +9,7 @@
   const MIN_EVENT_HEIGHT = 22;
   const API_REQUEST_TIMEOUT_MS = 7000;
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
+  const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
 
   const page = document.body.dataset.page || "schedule";
 
@@ -103,7 +104,7 @@
     }
 
     const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
-    const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromUrl();
+    const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromContext();
     const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
     const username = tgUser && tgUser.username ? `@${tgUser.username}` : "";
     const displayName = username || (userId ? `id${userId}` : "user");
@@ -166,11 +167,23 @@
     return "";
   }
 
-  function getTelegramIdFromUrl() {
+  function getTelegramIdFromContext() {
     try {
       const params = new URLSearchParams(window.location.search);
       const value = params.get("telegramId") || params.get("tg") || "";
       const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        const id = String(parsed);
+        saveTelegramId(id);
+        return id;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const saved = String(localStorage.getItem(TELEGRAM_ID_STORAGE_KEY) || "").trim();
+      const parsed = Number(saved);
       return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : "";
     } catch {
       return "";
@@ -429,6 +442,10 @@
     const list = [base];
 
     if (!explicitBase) {
+      const inferredRenderBase = inferRenderMiniAppApiBase();
+      if (inferredRenderBase) {
+        list.push(inferredRenderBase);
+      }
       if (host) {
         list.push(`${protocol}//${host}:8011`);
         list.push(`${protocol}//${host}:8010`);
@@ -463,7 +480,10 @@
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     const initData = tg && typeof tg.initData === "string" ? tg.initData : "";
     const unsafeUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
-    const telegramId = unsafeUser && unsafeUser.id ? String(unsafeUser.id) : getTelegramIdFromUrl();
+    const telegramId = unsafeUser && unsafeUser.id ? String(unsafeUser.id) : getTelegramIdFromContext();
+    if (telegramId) {
+      saveTelegramId(telegramId);
+    }
     const headers = {
       "X-Pinggy-No-Screen": "1"
     };
@@ -490,6 +510,30 @@
       return saved ? saved.replace(/\/+$/, "") : "";
     } catch {
       return "";
+    }
+  }
+
+  function inferRenderMiniAppApiBase() {
+    const protocol = window.location.protocol || "https:";
+    const hostname = window.location.hostname || "";
+    if (!hostname || !hostname.endsWith(".onrender.com")) {
+      return "";
+    }
+    if (hostname.includes("-frontend.")) {
+      return `${protocol}//${hostname.replace("-frontend.", "-miniapp-api.")}`;
+    }
+    if (hostname.includes("frontend")) {
+      return `${protocol}//${hostname.replace("frontend", "miniapp-api")}`;
+    }
+    return "";
+  }
+
+  function saveTelegramId(value) {
+    try {
+      if (!value) return;
+      localStorage.setItem(TELEGRAM_ID_STORAGE_KEY, String(value));
+    } catch {
+      // ignore
     }
   }
 
