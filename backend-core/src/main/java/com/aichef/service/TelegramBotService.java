@@ -735,6 +735,7 @@ public class TelegramBotService {
         meeting.setStartsAt(startsAt);
         meeting.setEndsAt(endsAt);
         meeting.setExternalLink(externalLink);
+        meeting.setColor("#93c5fd");
         meeting.setStatus(MeetingStatus.CONFIRMED);
 
         GoogleCalendarService.CreatedGoogleEvent googleEvent = googleCalendarService.createEvent(

@@ -36,7 +36,8 @@
     eventEditTitle: document.getElementById("eventEditTitle"),
     eventEditDate: document.getElementById("eventEditDate"),
     eventEditTime: document.getElementById("eventEditTime"),
-    eventEditDuration: document.getElementById("eventEditDuration")
+    eventEditDuration: document.getElementById("eventEditDuration"),
+    eventEditColor: document.getElementById("eventEditColor")
   };
 
   const state = {
@@ -348,6 +349,7 @@
         const pill = document.createElement("button");
         pill.type = "button";
         pill.className = "meeting-pill";
+        applyMeetingColor(pill, meeting.color);
         pill.style.top = `${top}px`;
         pill.style.left = `${left}px`;
         pill.style.width = `${width}px`;
@@ -402,6 +404,9 @@
       const mins = isValidDate(startsAt) && isValidDate(endsAt) ? Math.max(5, Math.round((endsAt - startsAt) / 60000)) : 60;
       el.eventEditDuration.value = String(mins);
     }
+    if (el.eventEditColor) {
+      el.eventEditColor.value = normalizeHexColor(meeting.color) || "#93c5fd";
+    }
   }
 
   function setEditMode(enabled) {
@@ -426,8 +431,13 @@
     const date = String(el.eventEditDate && el.eventEditDate.value ? el.eventEditDate.value : "").trim();
     const time = String(el.eventEditTime && el.eventEditTime.value ? el.eventEditTime.value : "").trim();
     const duration = Number(el.eventEditDuration && el.eventEditDuration.value ? el.eventEditDuration.value : 0);
+    const color = normalizeHexColor(el.eventEditColor && el.eventEditColor.value ? el.eventEditColor.value : "");
     if (!title || !date || !time || !Number.isFinite(duration) || duration <= 0) {
       setEventModalStatus("Проверьте название, дату, время и длительность");
+      return;
+    }
+    if (!color) {
+      setEventModalStatus("Некорректный цвет");
       return;
     }
 
@@ -440,16 +450,21 @@
     const payload = {
       title,
       startsAt: toOffsetIso(startsAt),
-      endsAt: toOffsetIso(endsAt)
+      endsAt: toOffsetIso(endsAt),
+      color
     };
 
     setEventModalStatus("Сохраняю...");
     const res = await requestWithFallback(
       getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
-      [{ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
+      [
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      ]
     );
     if (!res.success) {
-      setEventModalStatus(res.message || "Ошибка сохранения");
+      const detail = res.status ? ` (HTTP ${res.status})` : "";
+      setEventModalStatus((res.message || "Ошибка сохранения, проверь доступ и формат даты/времени") + detail);
       return;
     }
 
@@ -780,6 +795,30 @@
     const s = String(value || "").trim();
     if (!s) return s;
     return s[0].toUpperCase() + s.slice(1);
+  }
+
+  function normalizeHexColor(value) {
+    const v = String(value || "").trim();
+    return /^#([0-9a-fA-F]{6})$/.test(v) ? v.toLowerCase() : "";
+  }
+
+  function applyMeetingColor(element, color) {
+    if (!element) return;
+    const safe = normalizeHexColor(color) || "#93c5fd";
+    element.style.borderColor = safe;
+    element.style.backgroundColor = withAlpha(safe, 0.3);
+    element.style.color = "#1e3a8a";
+  }
+
+  function withAlpha(hex, alpha) {
+    const safe = normalizeHexColor(hex);
+    if (!safe) return "rgba(147,197,253,0.3)";
+    const raw = safe.slice(1);
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 0.3;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
   }
 
   function isValidDate(value) {

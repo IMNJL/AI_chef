@@ -325,15 +325,23 @@ body.sidebar-open .sidebar-backdrop {
   cursor: pointer;
   font: inherit;
   overflow: hidden;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .meeting-pill-title {
-  font-size: 11px;
-  line-height: 1.1;
+  font-size: 10px;
+  line-height: 1.05;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  hyphens: auto;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
+  width: 100%;
 }
 
 .now-time-line {
@@ -632,6 +640,13 @@ body.sidebar-open .sidebar-backdrop {
   font: inherit;
 }
 
+.event-color-field input[type="color"] {
+  padding: 0;
+  width: 58px;
+  height: 40px;
+  border-radius: 8px;
+}
+
 @media (max-width: 980px) {
   :root {
     --sidebar-width: 220px;
@@ -652,7 +667,7 @@ body.sidebar-open .sidebar-backdrop {
   .time-label { font-size: 12px; }
   .user-text .name { font-size: 12px; }
   .user-text .id { font-size: 11px; }
-  .meeting-pill-title { font-size: 10px; }
+  .meeting-pill-title { font-size: 9px; }
   .event-modal-title { font-size: 22px; }
   .event-modal-datetime { font-size: 15px; }
 }
