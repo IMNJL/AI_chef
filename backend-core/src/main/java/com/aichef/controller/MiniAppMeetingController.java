@@ -6,6 +6,8 @@ import com.aichef.domain.model.Meeting;
 import com.aichef.domain.model.User;
 import com.aichef.repository.CalendarDayRepository;
 import com.aichef.repository.MeetingRepository;
+import com.aichef.service.GoogleCalendarService;
+import com.aichef.service.GoogleOAuthService;
 import com.aichef.service.MiniAppAuthService;
 import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,6 +37,8 @@ public class MiniAppMeetingController {
     private final MiniAppAuthService miniAppAuthService;
     private final MeetingRepository meetingRepository;
     private final CalendarDayRepository calendarDayRepository;
+    private final GoogleCalendarService googleCalendarService;
+    private final GoogleOAuthService googleOAuthService;
 
     @GetMapping
     public ResponseEntity<?> list(
@@ -104,6 +109,29 @@ public class MiniAppMeetingController {
                     user.getId(), user.getTelegramId(), request.title(), request.startsAt(), request.endsAt(), normalizedColor, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
         }
+
+        // Create Google event only for users with explicit OAuth connection.
+        if (googleOAuthService.isConnected(user)) {
+            GoogleCalendarService.CreatedGoogleEvent googleEvent = googleCalendarService.createEvent(
+                    user,
+                    meeting.getTitle(),
+                    meeting.getStartsAt(),
+                    meeting.getEndsAt(),
+                    meeting.getExternalLink(),
+                    resolveZone(user)
+            );
+            if (googleEvent != null) {
+                if (googleEvent.eventId() != null && !googleEvent.eventId().isBlank()) {
+                    meeting.setGoogleEventId(googleEvent.eventId());
+                }
+                if ((meeting.getExternalLink() == null || meeting.getExternalLink().isBlank())
+                        && googleEvent.htmlLink() != null && !googleEvent.htmlLink().isBlank()) {
+                    meeting.setExternalLink(googleEvent.htmlLink());
+                }
+                meetingRepository.save(meeting);
+            }
+        }
+
         log.info("MiniApp meeting created. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
                 user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
         return ResponseEntity.ok(MeetingDto.from(meeting));
@@ -142,10 +170,8 @@ public class MiniAppMeetingController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
         User user = userOpt.get();
-        Meeting meeting = meetingRepository.findById(id).orElse(null);
-        if (meeting == null || meeting.getCalendarDay() == null
-                || meeting.getCalendarDay().getUser() == null
-                || !meeting.getCalendarDay().getUser().getId().equals(user.getId())) {
+        Meeting meeting = meetingRepository.findByIdAndCalendarDay_User(id, user).orElse(null);
+        if (meeting == null) {
             log.warn("MiniApp meeting update not found/forbidden. meetingId={}, userId={}, telegramId={}",
                     id, user.getId(), user.getTelegramId());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Meeting not found");
@@ -209,10 +235,8 @@ public class MiniAppMeetingController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
         User user = userOpt.get();
-        Meeting meeting = meetingRepository.findById(id).orElse(null);
-        if (meeting == null || meeting.getCalendarDay() == null
-                || meeting.getCalendarDay().getUser() == null
-                || !meeting.getCalendarDay().getUser().getId().equals(user.getId())) {
+        Meeting meeting = meetingRepository.findByIdAndCalendarDay_User(id, user).orElse(null);
+        if (meeting == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Meeting not found");
         }
         meeting.setStatus(MeetingStatus.CANCELED);
@@ -280,6 +304,17 @@ public class MiniAppMeetingController {
             return null;
         }
         return HEX_COLOR_PATTERN.matcher(trimmed).matches() ? trimmed.toLowerCase() : null;
+    }
+
+    private ZoneId resolveZone(User user) {
+        try {
+            if (user == null || user.getTimezone() == null || user.getTimezone().isBlank()) {
+                return ZoneId.of("Europe/Moscow");
+            }
+            return ZoneId.of(user.getTimezone());
+        } catch (Exception ignored) {
+            return ZoneId.of("Europe/Moscow");
+        }
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)

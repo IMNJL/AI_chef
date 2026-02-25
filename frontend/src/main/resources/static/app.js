@@ -128,6 +128,12 @@
       el.eventEditBtn.addEventListener("click", () => {
         const nextMode = !state.editMode;
         setEditMode(nextMode);
+        if (nextMode && el.eventEditTitle) {
+          window.setTimeout(() => {
+            el.eventEditTitle.focus();
+            el.eventEditTitle.select();
+          }, 0);
+        }
       });
     }
     if (el.eventEditForm) {
@@ -530,6 +536,14 @@
 
     state.formMode = "duplicate";
     setEditMode(true);
+    if (el.eventEditTitle) {
+      const originalTitle = String(activeMeeting.title || "Событие").trim();
+      el.eventEditTitle.value = `Копия: ${originalTitle}`;
+      window.setTimeout(() => {
+        el.eventEditTitle.focus();
+        el.eventEditTitle.select();
+      }, 0);
+    }
     setEventModalStatus("Режим дублирования: укажите новое название, дату и время, затем сохраните.");
   }
 
