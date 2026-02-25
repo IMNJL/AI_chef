@@ -28,6 +28,10 @@
     scheduleStatus: document.getElementById("scheduleStatus"),
     eventModal: document.getElementById("eventModal"),
     eventCloseBtn: document.getElementById("eventCloseBtn"),
+    eventMoreBtn: document.getElementById("eventMoreBtn"),
+    eventMoreMenu: document.getElementById("eventMoreMenu"),
+    eventDuplicateBtn: document.getElementById("eventDuplicateBtn"),
+    eventDeleteBtn: document.getElementById("eventDeleteBtn"),
     eventEditBtn: document.getElementById("eventEditBtn"),
     eventTitle: document.getElementById("eventTitle"),
     eventDateTime: document.getElementById("eventDateTime"),
@@ -106,6 +110,18 @@
         }
       });
     }
+    if (el.eventMoreBtn) {
+      el.eventMoreBtn.addEventListener("click", () => {
+        if (!el.eventMoreMenu) return;
+        el.eventMoreMenu.classList.toggle("hidden");
+      });
+    }
+    if (el.eventDuplicateBtn) {
+      el.eventDuplicateBtn.addEventListener("click", onDuplicateMeeting);
+    }
+    if (el.eventDeleteBtn) {
+      el.eventDeleteBtn.addEventListener("click", onDeleteMeeting);
+    }
     if (el.eventEditBtn) {
       el.eventEditBtn.addEventListener("click", () => {
         const nextMode = !state.editMode;
@@ -119,6 +135,13 @@
       if (e.key === "Escape" && el.eventModal && !el.eventModal.classList.contains("hidden")) {
         closeEventModal();
       }
+    });
+    document.addEventListener("click", (e) => {
+      if (!el.eventMoreMenu || !el.eventMoreBtn) return;
+      if (el.eventMoreMenu.classList.contains("hidden")) return;
+      const target = e.target;
+      if (target instanceof Node && (el.eventMoreMenu.contains(target) || el.eventMoreBtn.contains(target))) return;
+      el.eventMoreMenu.classList.add("hidden");
     });
   }
 
@@ -378,6 +401,7 @@
     if (!el.eventModal) return;
     el.eventModal.classList.add("hidden");
     state.activeMeetingId = "";
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
     setEventModalStatus("");
   }
 
@@ -477,6 +501,70 @@
     }
   }
 
+  async function onDuplicateMeeting() {
+    const activeMeeting = state.meetings.find((m) => String(m.id) === String(state.activeMeetingId));
+    if (!activeMeeting) {
+      setEventModalStatus("Событие не найдено");
+      return;
+    }
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
+
+    const startsAt = new Date(activeMeeting.startsAt);
+    const endsAt = new Date(activeMeeting.endsAt);
+    if (!isValidDate(startsAt) || !isValidDate(endsAt)) {
+      setEventModalStatus("Не удалось прочитать дату события");
+      return;
+    }
+    const payload = {
+      title: String(activeMeeting.title || "Событие"),
+      startsAt: toOffsetIso(startsAt),
+      endsAt: toOffsetIso(endsAt),
+      location: activeMeeting.location || null,
+      externalLink: activeMeeting.externalLink || null,
+      color: normalizeHexColor(activeMeeting.color) || "#93c5fd"
+    };
+
+    setEventModalStatus("Дублирую...");
+    const res = await requestWithFallback(
+      getMeetingEndpoints(),
+      [{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
+    );
+    if (!res.success) {
+      const detail = res.status ? ` (HTTP ${res.status})` : "";
+      setEventModalStatus((res.message || "Ошибка дублирования") + detail);
+      return;
+    }
+
+    setEventModalStatus("Событие продублировано");
+    await loadMeetingsAndRender();
+  }
+
+  async function onDeleteMeeting() {
+    const activeMeeting = state.meetings.find((m) => String(m.id) === String(state.activeMeetingId));
+    if (!activeMeeting) {
+      setEventModalStatus("Событие не найдено");
+      return;
+    }
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
+    const ok = window.confirm("Удалить это мероприятие?");
+    if (!ok) return;
+
+    setEventModalStatus("Удаляю...");
+    const res = await requestWithFallback(
+      getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
+      [{ method: "DELETE" }]
+    );
+    if (!res.success) {
+      const detail = res.status ? ` (HTTP ${res.status})` : "";
+      setEventModalStatus((res.message || "Ошибка удаления") + detail);
+      return;
+    }
+
+    closeEventModal();
+    await loadMeetingsAndRender();
+    setScheduleStatus("Событие удалено");
+  }
+
   function setEventModalStatus(message) {
     if (el.eventModalStatus) {
       el.eventModalStatus.textContent = message || "";
@@ -539,7 +627,10 @@
         API_REQUEST_TIMEOUT_MS
       );
       if (!response.ok) {
-        return { success: false, status: response.status, message: apiErrorMessage(response.status) };
+        const text = await response.text().catch(() => "");
+        const baseMessage = apiErrorMessage(response.status);
+        const details = text && text.length < 240 ? `: ${text}` : "";
+        return { success: false, status: response.status, message: `${baseMessage}${details}` };
       }
       if (response.status === 204) {
         return { success: true, status: response.status, data: null };

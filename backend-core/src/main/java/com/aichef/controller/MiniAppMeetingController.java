@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -74,6 +75,9 @@ public class MiniAppMeetingController {
                 || request.startsAt() == null || request.endsAt() == null) {
             return ResponseEntity.badRequest().body("Missing required fields");
         }
+        if (!request.endsAt().isAfter(request.startsAt())) {
+            return ResponseEntity.badRequest().body("endsAt must be after startsAt");
+        }
         String normalizedColor = normalizeHexColor(request.color());
         if (request.color() != null && normalizedColor == null) {
             return ResponseEntity.badRequest().body("Invalid color");
@@ -88,7 +92,19 @@ public class MiniAppMeetingController {
         meeting.setColor(normalizedColor == null ? DEFAULT_MEETING_COLOR : normalizedColor);
         meeting.setStatus(MeetingStatus.CONFIRMED);
         meeting.setCalendarDay(getOrCreateDay(user, request.startsAt().toLocalDate()));
-        meetingRepository.save(meeting);
+        try {
+            meetingRepository.save(meeting);
+        } catch (DataIntegrityViolationException e) {
+            log.error("MiniApp meeting create DB constraint error. userId={}, telegramId={}, title={}, startsAt={}, endsAt={}, color={}, error={}",
+                    user.getId(), user.getTelegramId(), request.title(), request.startsAt(), request.endsAt(), normalizedColor, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("DB constraint error");
+        } catch (Exception e) {
+            log.error("MiniApp meeting create failed. userId={}, telegramId={}, title={}, startsAt={}, endsAt={}, color={}, error={}",
+                    user.getId(), user.getTelegramId(), request.title(), request.startsAt(), request.endsAt(), normalizedColor, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
+        }
+        log.info("MiniApp meeting created. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
+                user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
         return ResponseEntity.ok(MeetingDto.from(meeting));
     }
 
@@ -120,6 +136,8 @@ public class MiniAppMeetingController {
     ) {
         Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
         if (userOpt.isEmpty()) {
+            log.warn("MiniApp meeting update unauthorized. meetingId={}, telegramIdParam={}, hasInitData={}",
+                    id, telegramId, initData != null && !initData.isBlank());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
         User user = userOpt.get();
@@ -127,6 +145,8 @@ public class MiniAppMeetingController {
         if (meeting == null || meeting.getCalendarDay() == null
                 || meeting.getCalendarDay().getUser() == null
                 || !meeting.getCalendarDay().getUser().getId().equals(user.getId())) {
+            log.warn("MiniApp meeting update not found/forbidden. meetingId={}, userId={}, telegramId={}",
+                    id, user.getId(), user.getTelegramId());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Meeting not found");
         }
         String normalizedColor = normalizeHexColor(request.color());
@@ -156,7 +176,22 @@ public class MiniAppMeetingController {
         if (request.color() != null) {
             meeting.setColor(normalizedColor);
         }
-        meetingRepository.save(meeting);
+        OffsetDateTime startsAt = meeting.getStartsAt();
+        OffsetDateTime endsAt = meeting.getEndsAt();
+        if (startsAt == null || endsAt == null || !endsAt.isAfter(startsAt)) {
+            return ResponseEntity.badRequest().body("endsAt must be after startsAt");
+        }
+        try {
+            meetingRepository.save(meeting);
+        } catch (DataIntegrityViolationException e) {
+            log.error("MiniApp meeting update DB constraint error. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}, error={}",
+                    user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("DB constraint error");
+        } catch (Exception e) {
+            log.error("MiniApp meeting update failed. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}, error={}",
+                    user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
+        }
         log.info("MiniApp meeting updated. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
                 user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
         return ResponseEntity.ok(MeetingDto.from(meeting));
@@ -180,7 +215,15 @@ public class MiniAppMeetingController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Meeting not found");
         }
         meeting.setStatus(MeetingStatus.CANCELED);
-        meetingRepository.save(meeting);
+        try {
+            meetingRepository.save(meeting);
+        } catch (Exception e) {
+            log.error("MiniApp meeting delete failed. userId={}, telegramId={}, meetingId={}, error={}",
+                    user.getId(), user.getTelegramId(), meeting.getId(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
+        }
+        log.info("MiniApp meeting deleted(canceled). userId={}, telegramId={}, meetingId={}",
+                user.getId(), user.getTelegramId(), meeting.getId());
         return ResponseEntity.noContent().build();
     }
 

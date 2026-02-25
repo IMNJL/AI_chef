@@ -572,7 +572,15 @@ body.sidebar-open .sidebar-backdrop {
   border-bottom: 1px solid var(--border);
 }
 
+.event-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
 .event-close-btn,
+.event-more-btn,
 .event-edit-btn {
   width: 38px;
   height: 38px;
@@ -587,6 +595,42 @@ body.sidebar-open .sidebar-backdrop {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.event-more-menu {
+  position: absolute;
+  right: 46px;
+  top: 44px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.14);
+  overflow: hidden;
+  z-index: 3;
+}
+
+.event-more-menu.hidden {
+  display: none;
+}
+
+.event-more-menu button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: #fff;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #334155;
+}
+
+.event-more-menu button + button {
+  border-top: 1px solid var(--border);
+}
+
+.event-more-menu button.danger {
+  color: #b91c1c;
 }
 
 .event-modal-body {

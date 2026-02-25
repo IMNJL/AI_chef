@@ -50,7 +50,14 @@
     <div class="event-modal-card">
       <div class="event-modal-head">
         <button type="button" class="event-close-btn" id="eventCloseBtn" aria-label="Закрыть">✕</button>
-        <button type="button" class="event-edit-btn" id="eventEditBtn" aria-label="Редактировать">✎</button>
+        <div class="event-head-actions">
+          <button type="button" class="event-more-btn" id="eventMoreBtn" aria-label="Действия">⋯</button>
+          <div class="event-more-menu hidden" id="eventMoreMenu">
+            <button type="button" id="eventDuplicateBtn">Дублировать</button>
+            <button type="button" class="danger" id="eventDeleteBtn">Удалить</button>
+          </div>
+          <button type="button" class="event-edit-btn" id="eventEditBtn" aria-label="Редактировать">✎</button>
+        </div>
       </div>
       <div class="event-modal-body">
         <div class="event-modal-title" id="eventTitle"></div>
