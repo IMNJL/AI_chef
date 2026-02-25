@@ -46,6 +46,39 @@
     </main>
   </div>
 
+  <div class="event-modal hidden" id="eventModal">
+    <div class="event-modal-card">
+      <div class="event-modal-head">
+        <button type="button" class="event-close-btn" id="eventCloseBtn" aria-label="Закрыть">✕</button>
+        <button type="button" class="event-edit-btn" id="eventEditBtn" aria-label="Редактировать">✎</button>
+      </div>
+      <div class="event-modal-body">
+        <div class="event-modal-title" id="eventTitle"></div>
+        <div class="event-modal-datetime" id="eventDateTime"></div>
+        <div class="event-modal-status" id="eventModalStatus"></div>
+        <form class="event-edit-form hidden" id="eventEditForm">
+          <label class="event-field">
+            <span>Название</span>
+            <input type="text" id="eventEditTitle" required />
+          </label>
+          <label class="event-field">
+            <span>Дата</span>
+            <input type="date" id="eventEditDate" required />
+          </label>
+          <label class="event-field">
+            <span>Время</span>
+            <input type="time" id="eventEditTime" required />
+          </label>
+          <label class="event-field">
+            <span>Длительность (мин)</span>
+            <input type="number" id="eventEditDuration" min="5" max="720" step="5" required />
+          </label>
+          <button type="submit" class="primary-btn">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>

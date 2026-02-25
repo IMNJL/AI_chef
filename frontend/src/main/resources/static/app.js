@@ -25,13 +25,26 @@
     weekGrid: document.getElementById("weekGrid"),
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
-    scheduleStatus: document.getElementById("scheduleStatus")
+    scheduleStatus: document.getElementById("scheduleStatus"),
+    eventModal: document.getElementById("eventModal"),
+    eventCloseBtn: document.getElementById("eventCloseBtn"),
+    eventEditBtn: document.getElementById("eventEditBtn"),
+    eventTitle: document.getElementById("eventTitle"),
+    eventDateTime: document.getElementById("eventDateTime"),
+    eventModalStatus: document.getElementById("eventModalStatus"),
+    eventEditForm: document.getElementById("eventEditForm"),
+    eventEditTitle: document.getElementById("eventEditTitle"),
+    eventEditDate: document.getElementById("eventEditDate"),
+    eventEditTime: document.getElementById("eventEditTime"),
+    eventEditDuration: document.getElementById("eventEditDuration")
   };
 
   const state = {
     weekStart: startOfWeek(new Date()),
     meetings: [],
-    nowTimer: null
+    nowTimer: null,
+    activeMeetingId: "",
+    editMode: false
   };
 
   init();
@@ -46,6 +59,7 @@
     }
 
     bindScheduleNav();
+    bindEventModal();
     renderWeekSkeleton();
     await loadMeetingsAndRender();
     scheduleNowLine();
@@ -78,6 +92,33 @@
         await loadMeetingsAndRender();
       });
     }
+  }
+
+  function bindEventModal() {
+    if (el.eventCloseBtn) {
+      el.eventCloseBtn.addEventListener("click", closeEventModal);
+    }
+    if (el.eventModal) {
+      el.eventModal.addEventListener("click", (e) => {
+        if (e.target === el.eventModal) {
+          closeEventModal();
+        }
+      });
+    }
+    if (el.eventEditBtn) {
+      el.eventEditBtn.addEventListener("click", () => {
+        const nextMode = !state.editMode;
+        setEditMode(nextMode);
+      });
+    }
+    if (el.eventEditForm) {
+      el.eventEditForm.addEventListener("submit", onSaveMeetingEdit);
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && el.eventModal && !el.eventModal.classList.contains("hidden")) {
+        closeEventModal();
+      }
+    });
   }
 
   function renderMenu() {
@@ -304,25 +345,137 @@
         const left = timeColWidth + dayIdx * dayWidth + 4;
         const width = Math.max(16, dayWidth - 8);
 
-        const pill = document.createElement("a");
+        const pill = document.createElement("button");
+        pill.type = "button";
         pill.className = "meeting-pill";
         pill.style.top = `${top}px`;
         pill.style.left = `${left}px`;
         pill.style.width = `${width}px`;
         pill.style.height = `${height}px`;
-        if (meeting.externalLink && /^https?:\/\//i.test(meeting.externalLink)) {
-          pill.href = meeting.externalLink;
-          pill.target = "_blank";
-          pill.rel = "noopener noreferrer";
-        } else {
-          pill.href = "#";
-          pill.addEventListener("click", (e) => e.preventDefault());
-        }
-        const timeText = `${pad2(segStart.getHours())}:${pad2(segStart.getMinutes())}-${pad2(segEnd.getHours())}:${pad2(segEnd.getMinutes())}`;
-        pill.innerHTML = `<span class="meeting-pill-title">${escapeHtml(meeting.title || "Событие")}</span><span class="meeting-pill-time">${timeText}</span>`;
+        pill.innerHTML = `<span class="meeting-pill-title">${escapeHtml(meeting.title || "Событие")}</span>`;
+        pill.addEventListener("click", () => {
+          openEventModal(meeting.id);
+        });
         el.weekGrid.appendChild(pill);
       }
     }
+  }
+
+  function openEventModal(meetingId) {
+    const meeting = state.meetings.find((m) => String(m.id) === String(meetingId));
+    if (!meeting || !el.eventModal) return;
+    state.activeMeetingId = String(meeting.id || "");
+    state.editMode = false;
+    fillEventModal(meeting);
+    setEventModalStatus("");
+    setEditMode(false);
+    el.eventModal.classList.remove("hidden");
+  }
+
+  function closeEventModal() {
+    if (!el.eventModal) return;
+    el.eventModal.classList.add("hidden");
+    state.activeMeetingId = "";
+    setEventModalStatus("");
+  }
+
+  function fillEventModal(meeting) {
+    const startsAt = new Date(meeting.startsAt);
+    const endsAt = new Date(meeting.endsAt);
+    const title = String(meeting.title || "Событие");
+    if (el.eventTitle) {
+      el.eventTitle.textContent = title;
+    }
+    if (el.eventDateTime) {
+      el.eventDateTime.textContent = formatMeetingDateTimeLine(startsAt, endsAt);
+    }
+    if (el.eventEditTitle) {
+      el.eventEditTitle.value = title;
+    }
+    if (el.eventEditDate) {
+      el.eventEditDate.value = isValidDate(startsAt) ? toYmd(startsAt) : "";
+    }
+    if (el.eventEditTime) {
+      el.eventEditTime.value = isValidDate(startsAt) ? `${pad2(startsAt.getHours())}:${pad2(startsAt.getMinutes())}` : "";
+    }
+    if (el.eventEditDuration) {
+      const mins = isValidDate(startsAt) && isValidDate(endsAt) ? Math.max(5, Math.round((endsAt - startsAt) / 60000)) : 60;
+      el.eventEditDuration.value = String(mins);
+    }
+  }
+
+  function setEditMode(enabled) {
+    state.editMode = Boolean(enabled);
+    if (el.eventEditForm) {
+      el.eventEditForm.classList.toggle("hidden", !state.editMode);
+    }
+    if (el.eventEditBtn) {
+      el.eventEditBtn.classList.toggle("active", state.editMode);
+    }
+  }
+
+  async function onSaveMeetingEdit(e) {
+    e.preventDefault();
+    const activeMeeting = state.meetings.find((m) => String(m.id) === String(state.activeMeetingId));
+    if (!activeMeeting) {
+      setEventModalStatus("Событие не найдено");
+      return;
+    }
+
+    const title = String(el.eventEditTitle && el.eventEditTitle.value ? el.eventEditTitle.value : "").trim();
+    const date = String(el.eventEditDate && el.eventEditDate.value ? el.eventEditDate.value : "").trim();
+    const time = String(el.eventEditTime && el.eventEditTime.value ? el.eventEditTime.value : "").trim();
+    const duration = Number(el.eventEditDuration && el.eventEditDuration.value ? el.eventEditDuration.value : 0);
+    if (!title || !date || !time || !Number.isFinite(duration) || duration <= 0) {
+      setEventModalStatus("Проверьте название, дату, время и длительность");
+      return;
+    }
+
+    const startsAt = parseLocalDateTime(date, time);
+    if (!startsAt) {
+      setEventModalStatus("Некорректная дата или время");
+      return;
+    }
+    const endsAt = new Date(startsAt.getTime() + duration * 60000);
+    const payload = {
+      title,
+      startsAt: toOffsetIso(startsAt),
+      endsAt: toOffsetIso(endsAt)
+    };
+
+    setEventModalStatus("Сохраняю...");
+    const res = await requestWithFallback(
+      getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
+      [{ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
+    );
+    if (!res.success) {
+      setEventModalStatus(res.message || "Ошибка сохранения");
+      return;
+    }
+
+    setEventModalStatus("Сохранено");
+    setEditMode(false);
+    await loadMeetingsAndRender();
+    const updated = state.meetings.find((m) => String(m.id) === String(activeMeeting.id));
+    if (updated) {
+      fillEventModal(updated);
+    }
+  }
+
+  function setEventModalStatus(message) {
+    if (el.eventModalStatus) {
+      el.eventModalStatus.textContent = message || "";
+    }
+  }
+
+  function formatMeetingDateTimeLine(startsAt, endsAt) {
+    if (!isValidDate(startsAt) || !isValidDate(endsAt)) {
+      return "";
+    }
+    const weekday = startsAt.toLocaleDateString("ru-RU", { weekday: "long" });
+    const day = startsAt.getDate();
+    const month = startsAt.toLocaleDateString("ru-RU", { month: "long" });
+    return `${capitalize(weekday)}, ${day} ${month} · ${pad2(startsAt.getHours())}:${pad2(startsAt.getMinutes())}-${pad2(endsAt.getHours())}:${pad2(endsAt.getMinutes())}`;
   }
 
   function scheduleNowLine() {
@@ -601,6 +754,32 @@
 
   function pad2(n) {
     return String(n).padStart(2, "0");
+  }
+
+  function parseLocalDateTime(date, time) {
+    const value = `${date}T${time}`;
+    const parsed = new Date(value);
+    return isValidDate(parsed) ? parsed : null;
+  }
+
+  function toOffsetIso(date) {
+    if (!isValidDate(date)) return null;
+    const y = date.getFullYear();
+    const m = pad2(date.getMonth() + 1);
+    const d = pad2(date.getDate());
+    const hh = pad2(date.getHours());
+    const mm = pad2(date.getMinutes());
+    const ss = pad2(date.getSeconds());
+    const off = -date.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const abs = Math.abs(off);
+    return `${y}-${m}-${d}T${hh}:${mm}:${ss}${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+  }
+
+  function capitalize(value) {
+    const s = String(value || "").trim();
+    if (!s) return s;
+    return s[0].toUpperCase() + s.slice(1);
   }
 
   function isValidDate(value) {
