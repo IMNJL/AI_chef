@@ -75,7 +75,7 @@
     const auth = common && common.buildAuth ? common.buildAuth() : { headers: {}, initData: "", telegramId: "" };
 
     const url = new URL(base + path);
-    if (!auth.initData && auth.telegramId) {
+    if (auth.telegramId) {
       url.searchParams.set("telegramId", auth.telegramId);
     }
 
