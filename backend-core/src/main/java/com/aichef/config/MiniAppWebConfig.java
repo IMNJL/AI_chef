@@ -6,6 +6,8 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 @Configuration
 public class MiniAppWebConfig implements WebMvcConfigurer {
@@ -19,12 +21,37 @@ public class MiniAppWebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         String origin = resolveOrigin(miniappPublicUrl);
-        if (origin == null && !allowInsecure) {
+        if (allowInsecure) {
+            List<String> patterns = new ArrayList<>();
+            patterns.add("http://localhost:*");
+            patterns.add("http://127.0.0.1:*");
+            patterns.add("http://0.0.0.0:*");
+            patterns.add("https://localhost:*");
+            patterns.add("https://127.0.0.1:*");
+            patterns.add("https://*.ngrok-free.dev");
+            patterns.add("https://*.trycloudflare.com");
+            patterns.add("https://*.github.io");
+            patterns.add("https://*.onrender.com");
+            if (origin != null) {
+                patterns.add(origin);
+            }
+
+            var cors = registry.addMapping("/api/miniapp/**")
+                    .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
+                    .allowedHeaders("*")
+                    .allowedOriginPatterns(patterns.toArray(String[]::new));
+            cors.allowCredentials(false);
             return;
         }
+
+        if (origin == null) {
+            return;
+        }
+
         registry.addMapping("/api/miniapp/**")
                 .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
-                .allowedOrigins(origin == null ? "*" : origin)
+                .allowedHeaders("*")
+                .allowedOrigins(origin)
                 .allowCredentials(false);
     }
 

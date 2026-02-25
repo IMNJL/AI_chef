@@ -75,7 +75,15 @@ public class LocalVoskVoiceTranscriptionService implements VoiceTranscriptionSer
             }
             return stdout;
         } catch (Exception e) {
-            throw new IllegalStateException("Local Vosk transcription failed for fileId=" + fileId + ": " + e.getMessage(), e);
+            String errorMessage = e.getMessage();
+            if (errorMessage != null && errorMessage.contains("No such file or directory: 'ffmpeg'")) {
+                throw new IllegalStateException(
+                        "Local Vosk transcription failed for fileId=" + fileId
+                                + ": ffmpeg is not installed or not available in PATH.",
+                        e
+                );
+            }
+            throw new IllegalStateException("Local Vosk transcription failed for fileId=" + fileId + ": " + errorMessage, e);
         } finally {
             if (workDir != null) {
                 try {

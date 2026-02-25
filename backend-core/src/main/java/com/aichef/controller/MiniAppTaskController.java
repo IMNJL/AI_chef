@@ -7,7 +7,9 @@ import com.aichef.domain.model.User;
 import com.aichef.repository.CalendarDayRepository;
 import com.aichef.repository.TaskItemRepository;
 import com.aichef.service.MiniAppAuthService;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/miniapp/tasks")
 public class MiniAppTaskController {
@@ -39,6 +42,8 @@ public class MiniAppTaskController {
     ) {
         Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
         if (userOpt.isEmpty()) {
+            log.warn("MiniApp tasks load unauthorized. telegramIdParam={}, hasInitData={}, from={}, to={}",
+                    telegramId, initData != null && !initData.isBlank(), from, to);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
 
@@ -52,12 +57,16 @@ public class MiniAppTaskController {
                     .stream()
                     .map(TaskDto::from)
                     .toList();
+            log.info("MiniApp tasks loaded. userId={}, telegramId={}, from={}, to={}, count={}",
+                    user.getId(), user.getTelegramId(), fromDate, toDate, tasks.size());
         } else {
             tasks = taskItemRepository
                     .findTop100ByCalendarDay_UserOrderByDueAtAsc(user)
                     .stream()
                     .map(TaskDto::from)
                     .toList();
+            log.info("MiniApp tasks loaded. userId={}, telegramId={}, from=none, to=none, count={}",
+                    user.getId(), user.getTelegramId(), tasks.size());
         }
 
         return ResponseEntity.ok(tasks);
@@ -88,7 +97,7 @@ public class MiniAppTaskController {
 
         TaskItem task = new TaskItem();
         task.setCalendarDay(calendarDay);
-        task.setTitle(request.title().trim());
+        task.setTitle(TextNormalization.normalizeRussian(request.title().trim()));
         task.setDueAt(dueAt);
         task.setCompleted(false);
         task.setPriority(resolvePriority(request.priority()));
@@ -116,7 +125,7 @@ public class MiniAppTaskController {
         }
 
         if (request.title() != null) {
-            String title = request.title().trim();
+            String title = TextNormalization.normalizeRussian(request.title().trim());
             if (!title.isBlank()) {
                 task.setTitle(title);
             }
@@ -195,7 +204,7 @@ public class MiniAppTaskController {
         public static TaskDto from(TaskItem task) {
             return new TaskDto(
                     task.getId(),
-                    task.getTitle(),
+                    TextNormalization.normalizeRussian(task.getTitle()),
                     task.getPriority() == null ? "MEDIUM" : task.getPriority().name(),
                     task.isCompleted(),
                     task.getDueAt()

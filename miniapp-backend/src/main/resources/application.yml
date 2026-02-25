@@ -40,8 +40,9 @@ logging:
 
 app:
   miniapp:
-    public-url: ${MINIAPP_PUBLIC_URL:http://localhost:5174}
+    public-url: ${MINIAPP_PUBLIC_URL:http://localhost:5174/}
     allow-insecure: ${MINIAPP_ALLOW_INSECURE:true}
+    default-telegram-id: ${MINIAPP_DEFAULT_TELEGRAM_ID:}
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:local-miniapp-token}
     bot-username: ${TELEGRAM_BOT_USERNAME:local-miniapp-bot}
@@ -54,7 +55,10 @@ app:
     processing-queue-capacity: ${TELEGRAM_PROCESSING_QUEUE_CAPACITY:200}
   ai:
     ollama-base-url: ${APP_OLLAMA_BASE_URL:}
-    ollama-model: ${APP_OLLAMA_MODEL:}
+    ollama-model: ${APP_OLLAMA_MODEL:qwen2.5:3b-instruct}
+    llm-base-url: ${APP_LLM_BASE_URL:}
+    llm-api-key: ${APP_LLM_API_KEY:}
+    llm-model: ${APP_LLM_MODEL:}
     whisper-command: ${APP_WHISPER_COMMAND:}
     whisper-model: ${APP_WHISPER_MODEL:small}
     whisper-fallback-model: ${APP_WHISPER_FALLBACK_MODEL:}

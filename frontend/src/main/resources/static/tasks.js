@@ -1,4 +1,6 @@
 (() => {
+  const API_REQUEST_TIMEOUT_MS = 7000;
+
   const el = {
     addBtn: document.getElementById("taskAddBtn"),
     modal: document.getElementById("taskModal"),
@@ -164,14 +166,18 @@
     const auth = common && common.buildAuth ? common.buildAuth() : { headers: {}, initData: "", telegramId: "" };
 
     const url = new URL(base + path);
-    if (!auth.initData && auth.telegramId) {
+    if (auth.telegramId) {
       url.searchParams.set("telegramId", auth.telegramId);
     }
 
     const headers = { ...(init.headers || {}), ...auth.headers };
 
     try {
-      const response = await fetch(url.toString(), { ...init, headers });
+      const response = await fetchWithTimeout(
+        url.toString(),
+        { ...init, headers },
+        API_REQUEST_TIMEOUT_MS
+      );
       if (!response.ok) {
         return { success: false, status: response.status, message: apiErrorMessage(response.status) };
       }
@@ -181,29 +187,39 @@
       const data = await response.json().catch(() => null);
       return { success: true, status: response.status, data };
     } catch {
+      if (window.location.protocol === "https:" && String(base).startsWith("http://")) {
+        return {
+          success: false,
+          message: "Ошибка сети: страница открыта по HTTPS, а API указан по HTTP. Нужен HTTPS API URL."
+        };
+      }
       return { success: false, message: "Ошибка сети" };
     }
   }
 
   async function requestWithFallback(paths, variants) {
     let lastError = { success: false, message: "Ошибка API" };
+    let firstHttpError = null;
     const common = window.AiCalCommon;
     const bases = common && typeof common.getApiBaseCandidates === "function"
       ? common.getApiBaseCandidates()
       : [window.location.origin];
+
     for (const base of bases) {
       for (const path of paths) {
         for (const variant of variants) {
           const res = await request(path, variant, base);
           if (res.success) return res;
+
           lastError = res;
-          if (res.status !== 404 && res.status !== 405) {
-            return res;
+          if (res.status != null && firstHttpError == null) {
+            firstHttpError = res;
           }
         }
       }
     }
-    return lastError;
+
+    return firstHttpError || lastError;
   }
 
   function getTaskEndpoints() {
@@ -265,5 +281,15 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  async function fetchWithTimeout(resource, init, timeoutMs) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(resource, { ...init, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
   }
 })();

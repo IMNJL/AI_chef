@@ -4,6 +4,7 @@ import com.aichef.config.AiProperties;
 import com.aichef.config.GoogleCalendarProperties;
 import com.aichef.config.MiniAppWebConfig;
 import com.aichef.config.TelegramProperties;
+import com.aichef.controller.MiniAppMeController;
 import com.aichef.controller.MiniAppMeetingController;
 import com.aichef.controller.MiniAppNoteController;
 import com.aichef.controller.MiniAppTaskController;
@@ -28,6 +29,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
                 @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
                         MiniAppWebConfig.class,
                         MiniAppAuthService.class,
+                        MiniAppMeController.class,
                         MiniAppTaskController.class,
                         MiniAppMeetingController.class,
                         MiniAppNoteController.class

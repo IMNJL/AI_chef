@@ -26,6 +26,7 @@ import com.aichef.repository.NoteEditSessionRepository;
 import com.aichef.repository.NotificationRepository;
 import com.aichef.repository.TaskItemRepository;
 import com.aichef.repository.UserRepository;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,12 +43,15 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,8 +134,9 @@ public class TelegramBotService {
                 .orElseGet(() -> {
                     User newUser = new User();
                     newUser.setTelegramId(chatId);
-                    log.info("Create new user for chatId={}", chatId);
-                    return userRepository.save(newUser);
+                    User saved = userRepository.save(newUser);
+                    logRegistration(saved);
+                    return saved;
                 });
 
         SourceType sourceType;
@@ -235,6 +240,27 @@ public class TelegramBotService {
             return;
         }
 
+        if (hasVoice) {
+            Meeting meetingFromVoice = tryCreateMeetingFromVoice(user, rawText, zoneId, metadata);
+            if (meetingFromVoice != null) {
+                saveInboundItem(
+                        user,
+                        sourceType,
+                        rawText,
+                        fileUrl,
+                        metadata,
+                        FilterClassification.MEETING,
+                        InboundStatus.PROCESSED
+                );
+                String response = "✅ Событие создано: " + meetingFromVoice.getTitle() + "\n🕒 "
+                        + meetingFromVoice.getStartsAt().toLocalDate() + " "
+                        + meetingFromVoice.getStartsAt().toLocalTime().withSecond(0).withNano(0);
+                sendMessage(chatId, withLink(response, meetingFromVoice.getExternalLink())
+                        + buildGoogleSyncWarning(user, meetingFromVoice), true);
+                return;
+            }
+        }
+
         EventCreationSession session = eventCreationSessionRepository.findByUser(user).orElse(null);
         if (session != null) {
             if (isCancelRequest(rawText)) {
@@ -270,6 +296,53 @@ public class TelegramBotService {
         InboundItem item = saveInboundItem(user, sourceType, rawText, fileUrl, metadata, intent.classification(), intent.status());
         String response = applyIntent(user, item, intent);
         sendMessage(chatId, response, true);
+    }
+
+    private Meeting tryCreateMeetingFromVoice(User user, String rawText, ZoneId zoneId, Map<String, Object> metadata) {
+        if (rawText == null || rawText.isBlank()) {
+            return null;
+        }
+        OllamaStructuredParsingService.ParsedEventData parsed = ollamaStructuredParsingService.extractEventData(rawText, zoneId);
+        if (!parsed.isCreateMeetingIntent() || parsed.date() == null || parsed.time() == null) {
+            return null;
+        }
+
+        Integer durationMinutes = parsed.durationMinutes();
+        if (durationMinutes == null || durationMinutes <= 0) {
+            durationMinutes = parseDurationMinutes(rawText);
+        }
+        if (durationMinutes == null || durationMinutes <= 0) {
+            return null;
+        }
+
+        String title = parsed.title();
+        if (title == null || title.isBlank()) {
+            title = extractTitleFromCommand(rawText);
+        }
+        title = TextNormalization.normalizeRussian(stripCreateCommandPhrases(title == null ? "" : title));
+        if (title != null) {
+            title = title.trim();
+        }
+        if (title == null || title.isBlank()) {
+            title = "Событие";
+        }
+
+        ZoneId resolvedZone = zoneId == null ? DEFAULT_ZONE : zoneId;
+        OffsetDateTime startsAt = parsed.date()
+                .atTime(parsed.time())
+                .atZone(resolvedZone)
+                .toOffsetDateTime();
+        OffsetDateTime endsAt = startsAt.plusMinutes(durationMinutes);
+
+        if (metadata != null) {
+            metadata.put("voice_llm_intent", parsed.intent());
+            metadata.put("voice_llm_title", parsed.title());
+            metadata.put("voice_llm_date", parsed.date().toString());
+            metadata.put("voice_llm_time", parsed.time().toString());
+            metadata.put("voice_llm_duration_minutes", durationMinutes);
+        }
+
+        return createMeetingWithReminder(user, null, title, startsAt, endsAt, null, resolvedZone);
     }
 
     public void sendMessage(Long chatId, String text) {
@@ -553,8 +626,8 @@ public class TelegramBotService {
         if (intent.action() == BotAction.CREATE_NOTE) {
             Note note = new Note();
             note.setUser(user);
-            note.setTitle(intent.title() == null ? "Заметка" : intent.title());
-            note.setContent(intent.noteContent() == null ? "" : intent.noteContent());
+            note.setTitle(TextNormalization.normalizeRussian(intent.title() == null ? "Заметка" : intent.title()));
+            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? "" : intent.noteContent()));
             noteRepository.save(note);
             return "📝 Заметка сохранена.\nID: " + note.getId();
         }
@@ -567,10 +640,10 @@ public class TelegramBotService {
             if (note == null) {
                 return "Заметка не найдена. Проверьте номер в списке.";
             }
-            note.setContent(intent.noteContent() == null ? note.getContent() : intent.noteContent());
+            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? note.getContent() : intent.noteContent()));
             if (intent.noteContent() != null && !intent.noteContent().isBlank()) {
                 String newTitle = intent.noteContent().length() > 70 ? intent.noteContent().substring(0, 70) : intent.noteContent();
-                note.setTitle(newTitle);
+                note.setTitle(TextNormalization.normalizeRussian(newTitle));
             }
             noteRepository.save(note);
             return "📝 Заметка обновлена: №" + resolveNoteNumber(user, note);
@@ -610,7 +683,7 @@ public class TelegramBotService {
             TaskItem taskItem = new TaskItem();
             taskItem.setCalendarDay(day);
             taskItem.setInboundItem(inboundItem);
-            taskItem.setTitle(intent.title());
+            taskItem.setTitle(TextNormalization.normalizeRussian(intent.title()));
             taskItem.setPriority(intent.priority() == null ? PriorityLevel.MEDIUM : intent.priority());
             taskItem.setDueAt(intent.dueAt());
             taskItemRepository.save(taskItem);
@@ -657,7 +730,7 @@ public class TelegramBotService {
         Meeting meeting = new Meeting();
         meeting.setCalendarDay(day);
         meeting.setInboundItem(inboundItem);
-        String cleanedTitle = stripCreateCommandPhrases(title);
+        String cleanedTitle = TextNormalization.normalizeRussian(stripCreateCommandPhrases(title));
         meeting.setTitle(cleanedTitle == null || cleanedTitle.isBlank() ? "Событие" : cleanedTitle);
         meeting.setStartsAt(startsAt);
         meeting.setEndsAt(endsAt);
@@ -1615,6 +1688,22 @@ public class TelegramBotService {
         }
     }
 
+    private void logRegistration(User user) {
+        if (user == null) {
+            return;
+        }
+        String who;
+        if (user.getGender() == null) {
+            who = "молодой человек";
+        } else {
+            who = switch (user.getGender()) {
+                case FEMALE -> "девушка";
+                case MALE, UNKNOWN -> "молодой человек";
+            };
+        }
+        log.info("человек зарегистрировался: id = {}, {}", user.getId(), who);
+    }
+
     private void sendPinnedMiniAppLink(Long chatId) {
         String miniAppUrl = buildMiniAppUrl();
         if (miniAppUrl == null || miniAppUrl.isBlank() || !isHttpsUrl(miniAppUrl)) {
@@ -1665,10 +1754,18 @@ public class TelegramBotService {
                 origin.append(":").append(port);
             }
             String path = uri.getPath();
+            String query = uri.getRawQuery();
+
+            StringBuilder result = new StringBuilder(origin);
             if (path != null && !path.isBlank() && !"/".equals(path)) {
-                return origin + path;
+                result.append(path);
+            } else {
+                result.append("/miniapp");
             }
-            return origin + "/miniapp";
+            if (query != null && !query.isBlank()) {
+                result.append("?").append(query);
+            }
+            return result.toString();
         } catch (Exception e) {
             return null;
         }
@@ -1709,14 +1806,73 @@ public class TelegramBotService {
     }
 
     private String buildVoiceFailureMessage(Exception error) {
-        String message = error == null ? "" : Objects.toString(error.getMessage(), "").toLowerCase();
+        String message = collectErrorText(error);
         if (message.contains("checksum") || message.contains("whisper model download")) {
             return "Не удалось распознать голос: локальная модель Whisper не скачалась корректно. "
                     + "Проверьте сеть к openaipublic.azureedge.net или задайте локальный файл через APP_WHISPER_MODEL.";
         }
+        if (message.contains("ffmpeg is not installed") || message.contains("no such file or directory: 'ffmpeg'")) {
+            return "Не удалось распознать голос: в системе не найден ffmpeg. Установите ffmpeg и перезапустите сервис.";
+        }
+        if (message.contains("whisper cli is not installed")
+                || message.contains("command not found: whisper")
+                || message.contains("app_whisper_command")) {
+            return "Не удалось распознать голос: не найден Whisper CLI. "
+                    + "Установите whisper или задайте корректный APP_WHISPER_COMMAND, затем перезапустите сервис.";
+        }
+        if (message.contains("vosk model path does not exist")
+                || message.contains("app_vosk_model_path is empty")
+                || message.contains("local vosk transcription failed")
+                || message.contains("scripts/vosk_transcribe.py")
+                || message.contains("no module named vosk")) {
+            return "Не удалось распознать голос через Vosk. "
+                    + "Проверьте APP_VOSK_MODEL_PATH, APP_VOSK_PYTHON и наличие scripts/vosk_transcribe.py в контейнере.";
+        }
         if (message.contains("vosk stt failed")) {
             return "Не удалось распознать голос через Vosk. Проверьте APP_VOSK_MODEL_PATH и модель.";
         }
-        return "Не удалось распознать голос. Проверьте локальные движки STT (Vosk/Whisper) и попробуйте еще раз.";
+        return "Не удалось распознать голос. Проверьте локальные движки STT (Vosk/Whisper). "
+                + "Коротко: " + compactErrorForUser(message);
+    }
+
+    private String compactErrorForUser(String message) {
+        if (message == null || message.isBlank()) {
+            return "причина не определена";
+        }
+        String normalized = message.replace('\n', ' ').replace('\r', ' ').replaceAll("\\s+", " ").trim();
+        int limit = 180;
+        if (normalized.length() <= limit) {
+            return normalized;
+        }
+        return normalized.substring(0, limit) + "...";
+    }
+
+    private String collectErrorText(Throwable error) {
+        if (error == null) {
+            return "";
+        }
+
+        StringBuilder all = new StringBuilder();
+        ArrayDeque<Throwable> queue = new ArrayDeque<>();
+        Set<Throwable> visited = new HashSet<>();
+        queue.add(error);
+        while (!queue.isEmpty()) {
+            Throwable current = queue.removeFirst();
+            if (current == null || !visited.add(current)) {
+                continue;
+            }
+
+            all.append(' ').append(Objects.toString(current.getMessage(), ""));
+            Throwable cause = current.getCause();
+            if (cause != null) {
+                queue.addLast(cause);
+            }
+            for (Throwable suppressed : current.getSuppressed()) {
+                if (suppressed != null) {
+                    queue.addLast(suppressed);
+                }
+            }
+        }
+        return all.toString().toLowerCase(Locale.ROOT);
     }
 }

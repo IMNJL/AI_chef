@@ -7,7 +7,9 @@ import com.aichef.domain.model.User;
 import com.aichef.repository.CalendarDayRepository;
 import com.aichef.repository.MeetingRepository;
 import com.aichef.service.MiniAppAuthService;
+import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/miniapp/meetings")
 public class MiniAppMeetingController {
@@ -37,6 +40,8 @@ public class MiniAppMeetingController {
     ) {
         Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
         if (userOpt.isEmpty()) {
+            log.warn("MiniApp meetings load unauthorized. telegramIdParam={}, hasInitData={}, from={}, to={}",
+                    telegramId, initData != null && !initData.isBlank(), from, to);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
         User user = userOpt.get();
@@ -48,6 +53,8 @@ public class MiniAppMeetingController {
                 .filter(m -> m.getStatus() != MeetingStatus.CANCELED)
                 .map(MeetingDto::from)
                 .toList();
+        log.info("MiniApp meetings loaded. userId={}, telegramId={}, from={}, to={}, count={}",
+                user.getId(), user.getTelegramId(), fromDate, toDate, result.size());
         return ResponseEntity.ok(result);
     }
 
@@ -67,7 +74,7 @@ public class MiniAppMeetingController {
         }
         User user = userOpt.get();
         Meeting meeting = new Meeting();
-        meeting.setTitle(request.title().trim());
+        meeting.setTitle(TextNormalization.normalizeRussian(request.title().trim()));
         meeting.setStartsAt(request.startsAt());
         meeting.setEndsAt(request.endsAt());
         meeting.setLocation(request.location());
@@ -98,7 +105,7 @@ public class MiniAppMeetingController {
         }
 
         if (request.title() != null) {
-            String title = request.title().trim();
+            String title = TextNormalization.normalizeRussian(request.title().trim());
             if (!title.isBlank()) {
                 meeting.setTitle(title);
             }
@@ -164,11 +171,11 @@ public class MiniAppMeetingController {
         public static MeetingDto from(Meeting meeting) {
             return new MeetingDto(
                     meeting.getId(),
-                    meeting.getTitle(),
+                    TextNormalization.normalizeRussian(meeting.getTitle()),
                     meeting.getStartsAt(),
                     meeting.getEndsAt(),
-                    meeting.getLocation(),
-                    meeting.getExternalLink()
+                    TextNormalization.normalizeRussian(meeting.getLocation()),
+                    TextNormalization.normalizeRussian(meeting.getExternalLink())
             );
         }
     }

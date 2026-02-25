@@ -1,5 +1,6 @@
 package com.aichef.domain.model;
 
+import com.aichef.domain.enums.Gender;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,4 +29,8 @@ public class User extends BaseEntity {
 
     @Column(nullable = false)
     private String locale = "ru";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender")
+    private Gender gender = Gender.UNKNOWN;
 }

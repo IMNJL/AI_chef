@@ -32,13 +32,26 @@ public class MiniAppAuthService {
 
     @Value("${app.miniapp.allow-insecure:true}")
     private boolean allowInsecure;
+    @Value("${app.miniapp.default-telegram-id:}")
+    private String defaultTelegramIdValue;
 
     public Optional<User> resolveUser(String initData, Long telegramId) {
-        Long id = resolveTelegramId(initData, telegramId);
-        if (id == null) {
-            return Optional.empty();
+        Long idFromInitData = null;
+        if (initData != null && !initData.isBlank()) {
+            idFromInitData = parseTelegramIdFromInitData(initData);
+            if (idFromInitData != null) {
+                return Optional.of(getOrCreateUser(idFromInitData));
+            }
         }
-        return userRepository.findByTelegramId(id);
+
+        if (allowInsecure && telegramId != null) {
+            return Optional.of(getOrCreateUser(telegramId));
+        }
+        Long defaultTelegramId = parseDefaultTelegramId();
+        if (allowInsecure && defaultTelegramId != null) {
+            return Optional.of(getOrCreateUser(defaultTelegramId));
+        }
+        return Optional.empty();
     }
 
     public Long resolveTelegramId(String initData, Long telegramId) {
@@ -51,7 +64,23 @@ public class MiniAppAuthService {
         if (allowInsecure && telegramId != null) {
             return telegramId;
         }
+        Long defaultTelegramId = parseDefaultTelegramId();
+        if (allowInsecure && defaultTelegramId != null) {
+            return defaultTelegramId;
+        }
         return null;
+    }
+
+    private Long parseDefaultTelegramId() {
+        if (defaultTelegramIdValue == null || defaultTelegramIdValue.isBlank()) {
+            return null;
+        }
+        try {
+            long parsed = Long.parseLong(defaultTelegramIdValue.trim());
+            return parsed > 0 ? parsed : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private Long parseTelegramIdFromInitData(String initData) {
@@ -137,5 +166,14 @@ public class MiniAppAuthService {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
+    }
+
+    private User getOrCreateUser(Long telegramId) {
+        return userRepository.findByTelegramId(telegramId)
+                .orElseGet(() -> {
+                    User user = new User();
+                    user.setTelegramId(telegramId);
+                    return userRepository.save(user);
+                });
     }
 }

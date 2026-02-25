@@ -1,0 +1,146 @@
+databases:
+  - name: aichef-db
+    plan: free
+    databaseName: aichef
+    user: aichef
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: aichef-miniapp-api
+    env: docker
+    plan: free
+    rootDir: .
+    dockerfilePath: ./miniapp-backend/Dockerfile.render
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: ai-chef-miniapp
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+      - key: MINIAPP_ALLOW_INSECURE
+        value: "true"
+      - key: MINIAPP_DEFAULT_TELEGRAM_ID
+        sync: false
+      - key: MINIAPP_PUBLIC_URL
+        sync: false
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: aichef-db
+          property: jdbcConnectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: aichef-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: aichef-db
+          property: password
+      - key: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+        value: org.hibernate.dialect.PostgreSQLDialect
+      - key: GOOGLE_CALENDAR_ENABLED
+        value: "false"
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: APP_OLLAMA_BASE_URL
+        sync: false
+      - key: APP_OLLAMA_MODEL
+        value: qwen2.5:3b-instruct
+      - key: APP_LLM_BASE_URL
+        sync: false
+      - key: APP_LLM_API_KEY
+        sync: false
+      - key: APP_LLM_MODEL
+        sync: false
+
+  - type: web
+    name: aichef-telegram
+    env: docker
+    plan: free
+    rootDir: .
+    dockerfilePath: ./telegram-backend/Dockerfile.render
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: ai-chef-telegram
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_WEBHOOK_PATH
+        value: /api/telegram/webhook
+      - key: TELEGRAM_API_BASE
+        value: https://api.telegram.org
+      - key: APP_PUBLIC_BASE_URL
+        sync: false
+      - key: MINIAPP_PUBLIC_URL
+        sync: false
+      - key: MINIAPP_ALLOW_INSECURE
+        value: "true"
+      - key: MINIAPP_DEFAULT_TELEGRAM_ID
+        sync: false
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: aichef-db
+          property: jdbcConnectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: aichef-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: aichef-db
+          property: password
+      - key: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+        value: org.hibernate.dialect.PostgreSQLDialect
+      - key: GOOGLE_CALENDAR_ENABLED
+        value: "false"
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: APP_OLLAMA_BASE_URL
+        sync: false
+      - key: APP_OLLAMA_MODEL
+        value: qwen2.5:3b-instruct
+      - key: APP_LLM_BASE_URL
+        sync: false
+      - key: APP_LLM_API_KEY
+        sync: false
+      - key: APP_LLM_MODEL
+        sync: false
+      - key: APP_WHISPER_COMMAND
+        value: ""
+      - key: APP_WHISPER_MODEL
+        value: ""
+      - key: APP_VOSK_PYTHON
+        value: /opt/venv/bin/python
+      - key: APP_VOSK_MODEL_PATH
+        value: /opt/models/vosk-model-small-ru-0.22
+      - key: APP_WHISPER_FALLBACK_MODEL
+        value: ""
+
+  - type: web
+    name: aichef-frontend
+    env: docker
+    plan: free
+    rootDir: .
+    dockerfilePath: ./frontend/Dockerfile.render
+    healthCheckPath: /actuator/health
+    autoDeploy: true
