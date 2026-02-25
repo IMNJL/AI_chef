@@ -20,12 +20,20 @@ public class TelegramWebhookRegistrar implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         String baseUrl = properties.publicBaseUrl();
-        log.info("Telegram config: botUsername={}, webhookPath={}, hasPublicBaseUrl={}, hasToken={}",
+        log.info("Telegram config: botUsername={}, webhookPath={}, hasPublicBaseUrl={}, hasToken={}, useWebhook={}",
                 properties.botUsername(),
                 properties.webhookPath(),
                 baseUrl != null && !baseUrl.isBlank(),
-                properties.botToken() != null && !properties.botToken().isBlank());
+                properties.botToken() != null && !properties.botToken().isBlank(),
+                properties.useWebhook());
         telegramBotService.configureMiniAppEntryPoints();
+
+        if (!properties.useWebhook()) {
+            log.info("Webhook is disabled by TELEGRAM_USE_WEBHOOK=false. Deleting webhook and enabling polling.");
+            telegramBotService.deleteWebhook(false);
+            telegramBotService.logWebhookInfo();
+            return;
+        }
 
         String webhookBaseUrl = resolveWebhookBaseUrl(baseUrl);
         if (webhookBaseUrl == null) {

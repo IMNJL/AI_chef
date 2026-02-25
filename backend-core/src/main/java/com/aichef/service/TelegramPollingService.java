@@ -53,7 +53,7 @@ public class TelegramPollingService {
 
     @Scheduled(fixedDelayString = "${app.telegram.poll-interval-ms:3000}")
     public void pollUpdates() {
-        if (isWebhookCurrentlyActive()) {
+        if (properties.useWebhook() && isWebhookCurrentlyActive()) {
             return;
         }
         if (System.currentTimeMillis() < nextPollAllowedAtMs.get()) {
@@ -95,6 +95,12 @@ public class TelegramPollingService {
             }
         } catch (HttpClientErrorException.Conflict e) {
             String msg = e.getMessage() == null ? "" : e.getMessage();
+            if (msg.contains("can't use getUpdates method while webhook is active")) {
+                log.warn("Polling conflict with active webhook detected. Deleting webhook and continuing in polling mode.");
+                telegramBotService.deleteWebhook(false);
+                resetWebhookStateCache();
+                return;
+            }
             if (msg.contains("terminated by other getUpdates request")) {
                 if (pollingConflictLogged.compareAndSet(false, true)) {
                     log.error("Polling conflict: another bot instance is running. Stop extra instance to continue polling.");
@@ -176,5 +182,10 @@ public class TelegramPollingService {
         webhookActive.set(active);
         webhookStateCheckedAtMs.set(now);
         return active;
+    }
+
+    private void resetWebhookStateCache() {
+        webhookActive.set(false);
+        webhookStateCheckedAtMs.set(0);
     }
 }
