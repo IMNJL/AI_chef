@@ -13,7 +13,6 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -48,10 +47,13 @@ public class TelegramPollingService {
     private final AtomicBoolean pollingConflictLogged = new AtomicBoolean(false);
     private final AtomicInteger networkErrorStreak = new AtomicInteger(0);
     private final AtomicLong nextPollAllowedAtMs = new AtomicLong(0);
+    private final AtomicLong webhookStateCheckedAtMs = new AtomicLong(0);
+    private final AtomicBoolean webhookActive = new AtomicBoolean(false);
+    private static final long WEBHOOK_STATE_CACHE_MS = 30_000;
 
     @Scheduled(fixedDelayString = "${app.telegram.poll-interval-ms:3000}")
     public void pollUpdates() {
-        if (isWebhookModeEnabled(properties.publicBaseUrl())) {
+        if (isWebhookCurrentlyActive()) {
             return;
         }
         if (System.currentTimeMillis() < nextPollAllowedAtMs.get()) {
@@ -151,19 +153,28 @@ public class TelegramPollingService {
         return cause.getClass().getSimpleName() + ": " + message;
     }
 
-    private boolean isWebhookModeEnabled(String baseUrl) {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            return false;
+    private boolean isWebhookCurrentlyActive() {
+        long now = System.currentTimeMillis();
+        if (now - webhookStateCheckedAtMs.get() < WEBHOOK_STATE_CACHE_MS) {
+            return webhookActive.get();
         }
+
+        boolean active = false;
         try {
-            URI uri = URI.create(baseUrl.trim());
-            String host = uri.getHost();
-            if (host == null) {
-                return false;
+            Map<?, ?> response = telegramRestClient.get()
+                    .uri("/bot{token}/getWebhookInfo", properties.botToken())
+                    .retrieve()
+                    .body(Map.class);
+            if (response != null && Boolean.TRUE.equals(response.get("ok")) && response.get("result") instanceof Map<?, ?> result) {
+                Object urlObj = result.get("url");
+                String url = urlObj instanceof String s ? s.trim() : "";
+                active = !url.isBlank();
             }
-            return !("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host));
         } catch (Exception e) {
-            return false;
+            log.warn("Failed to check webhook state, assuming polling mode. error={}", e.getMessage());
         }
+        webhookActive.set(active);
+        webhookStateCheckedAtMs.set(now);
+        return active;
     }
 }

@@ -200,13 +200,13 @@
     const host = window.location.hostname || "";
     const base = getApiBaseUrl();
     const explicitBase = readQueryApiBase() || readConfigApiBase() || readSavedApiBase();
+    const inferredRenderBase = inferRenderMiniAppApiBase();
     const list = [base];
+    if (inferredRenderBase && inferredRenderBase !== base) {
+      list.push(inferredRenderBase);
+    }
 
     if (!explicitBase) {
-      const inferredRenderBase = inferRenderMiniAppApiBase();
-      if (inferredRenderBase) {
-        list.push(inferredRenderBase);
-      }
       if (host) {
         list.push(`${protocol}//${host}:8011`);
         list.push(`${protocol}//${host}:8010`);
@@ -224,6 +224,9 @@
       const origin = window.location.origin.replace(/\/+$/, "");
       if (origin && origin !== base) {
         list.push(origin);
+      }
+      if (inferredRenderBase && inferredRenderBase !== origin) {
+        list.push(inferredRenderBase);
       }
     }
 
