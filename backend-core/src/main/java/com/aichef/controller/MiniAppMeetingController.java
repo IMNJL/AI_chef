@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -279,5 +280,17 @@ public class MiniAppMeetingController {
             return null;
         }
         return HEX_COLOR_PATTERN.matcher(trimmed).matches() ? trimmed.toLowerCase() : null;
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<String> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.error("MiniApp meeting request type mismatch. message={}", e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid request format");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> handleUnhandled(Exception e) {
+        log.error("MiniApp meeting controller unhandled error. message={}", e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
     }
 }

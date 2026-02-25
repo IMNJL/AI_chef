@@ -41,7 +41,8 @@
     eventEditDate: document.getElementById("eventEditDate"),
     eventEditTime: document.getElementById("eventEditTime"),
     eventEditDuration: document.getElementById("eventEditDuration"),
-    eventEditColor: document.getElementById("eventEditColor")
+    eventEditColor: document.getElementById("eventEditColor"),
+    eventSubmitBtn: document.getElementById("eventSubmitBtn")
   };
 
   const state = {
@@ -49,7 +50,8 @@
     meetings: [],
     nowTimer: null,
     activeMeetingId: "",
-    editMode: false
+    editMode: false,
+    formMode: "edit"
   };
 
   init();
@@ -391,6 +393,7 @@
     if (!meeting || !el.eventModal) return;
     state.activeMeetingId = String(meeting.id || "");
     state.editMode = false;
+    state.formMode = "edit";
     fillEventModal(meeting);
     setEventModalStatus("");
     setEditMode(false);
@@ -401,6 +404,7 @@
     if (!el.eventModal) return;
     el.eventModal.classList.add("hidden");
     state.activeMeetingId = "";
+    state.formMode = "edit";
     if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
     setEventModalStatus("");
   }
@@ -435,6 +439,7 @@
 
   function setEditMode(enabled) {
     state.editMode = Boolean(enabled);
+    updateSubmitButtonText();
     if (el.eventEditForm) {
       el.eventEditForm.classList.toggle("hidden", !state.editMode);
     }
@@ -479,24 +484,38 @@
     };
 
     setEventModalStatus("Сохраняю...");
-    const res = await requestWithFallback(
-      getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
-      [
-        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
-        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      ]
-    );
+    const saveTargets = state.formMode === "duplicate"
+      ? getMeetingEndpoints()
+      : getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`);
+    const saveVariants = state.formMode === "duplicate"
+      ? [{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
+      : [
+          { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+        ];
+
+    const res = await requestWithFallback(saveTargets, saveVariants);
     if (!res.success) {
       const detail = res.status ? ` (HTTP ${res.status})` : "";
       setEventModalStatus((res.message || "Ошибка сохранения, проверь доступ и формат даты/времени") + detail);
       return;
     }
 
-    setEventModalStatus("Сохранено");
+    const wasDuplicate = state.formMode === "duplicate";
+    if (wasDuplicate) {
+      setEventModalStatus("Копия создана");
+      state.formMode = "edit";
+    } else {
+      setEventModalStatus("Сохранено");
+    }
     setEditMode(false);
     await loadMeetingsAndRender();
-    const updated = state.meetings.find((m) => String(m.id) === String(activeMeeting.id));
+    const focusId = wasDuplicate
+      ? String(res.data && res.data.id ? res.data.id : activeMeeting.id)
+      : String(activeMeeting.id);
+    const updated = state.meetings.find((m) => String(m.id) === focusId);
     if (updated) {
+      state.activeMeetingId = String(updated.id || "");
       fillEventModal(updated);
     }
   }
@@ -509,34 +528,9 @@
     }
     if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
 
-    const startsAt = new Date(activeMeeting.startsAt);
-    const endsAt = new Date(activeMeeting.endsAt);
-    if (!isValidDate(startsAt) || !isValidDate(endsAt)) {
-      setEventModalStatus("Не удалось прочитать дату события");
-      return;
-    }
-    const payload = {
-      title: String(activeMeeting.title || "Событие"),
-      startsAt: toOffsetIso(startsAt),
-      endsAt: toOffsetIso(endsAt),
-      location: activeMeeting.location || null,
-      externalLink: activeMeeting.externalLink || null,
-      color: normalizeHexColor(activeMeeting.color) || "#93c5fd"
-    };
-
-    setEventModalStatus("Дублирую...");
-    const res = await requestWithFallback(
-      getMeetingEndpoints(),
-      [{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
-    );
-    if (!res.success) {
-      const detail = res.status ? ` (HTTP ${res.status})` : "";
-      setEventModalStatus((res.message || "Ошибка дублирования") + detail);
-      return;
-    }
-
-    setEventModalStatus("Событие продублировано");
-    await loadMeetingsAndRender();
+    state.formMode = "duplicate";
+    setEditMode(true);
+    setEventModalStatus("Режим дублирования: укажите новое название, дату и время, затем сохраните.");
   }
 
   async function onDeleteMeeting() {
@@ -569,6 +563,11 @@
     if (el.eventModalStatus) {
       el.eventModalStatus.textContent = message || "";
     }
+  }
+
+  function updateSubmitButtonText() {
+    if (!el.eventSubmitBtn) return;
+    el.eventSubmitBtn.textContent = state.formMode === "duplicate" ? "Создать копию" : "Сохранить";
   }
 
   function formatMeetingDateTimeLine(startsAt, endsAt) {
