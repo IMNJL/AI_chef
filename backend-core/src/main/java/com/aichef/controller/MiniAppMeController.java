@@ -4,6 +4,7 @@ import com.aichef.domain.enums.Gender;
 import com.aichef.domain.model.User;
 import com.aichef.service.MiniAppAuthService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/miniapp")
 public class MiniAppMeController {
@@ -29,11 +31,15 @@ public class MiniAppMeController {
     ) {
         Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
         if (userOpt.isEmpty()) {
+            log.warn("MiniApp profile load unauthorized. telegramIdParam={}, hasInitData={}",
+                    telegramId, initData != null && !initData.isBlank());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
 
         User user = userOpt.get();
         Gender gender = user.getGender() == null ? Gender.UNKNOWN : user.getGender();
+        log.info("MiniApp profile loaded. userId={}, telegramId={}, gender={}",
+                user.getId(), user.getTelegramId(), gender);
         return ResponseEntity.ok(new MeResponse(user.getId(), user.getTelegramId(), gender, toTitlePrefix(gender)));
     }
 

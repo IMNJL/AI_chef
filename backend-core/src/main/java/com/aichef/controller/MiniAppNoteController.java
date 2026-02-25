@@ -6,6 +6,7 @@ import com.aichef.repository.NoteRepository;
 import com.aichef.service.MiniAppAuthService;
 import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/miniapp/notes")
 public class MiniAppNoteController {
@@ -30,13 +32,18 @@ public class MiniAppNoteController {
     ) {
         Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
         if (userOpt.isEmpty()) {
+            log.warn("MiniApp notes load unauthorized. telegramIdParam={}, hasInitData={}",
+                    telegramId, initData != null && !initData.isBlank());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
         }
 
-        List<NoteDto> notes = noteRepository.findTop20ByUserAndArchivedFalseOrderByUpdatedAtDesc(userOpt.get())
+        User user = userOpt.get();
+        List<NoteDto> notes = noteRepository.findTop20ByUserAndArchivedFalseOrderByUpdatedAtDesc(user)
                 .stream()
                 .map(NoteDto::from)
                 .toList();
+        log.info("MiniApp notes loaded. userId={}, telegramId={}, count={}",
+                user.getId(), user.getTelegramId(), notes.size());
 
         return ResponseEntity.ok(notes);
     }
