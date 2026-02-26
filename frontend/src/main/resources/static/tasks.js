@@ -1,5 +1,6 @@
 (() => {
   const API_REQUEST_TIMEOUT_MS = 7000;
+  const DELETE_DELAY_SECONDS = 5;
 
   const el = {
     addBtn: document.getElementById("taskAddBtn"),
@@ -12,6 +13,7 @@
     list: document.getElementById("taskList"),
     status: document.getElementById("taskStatus")
   };
+  const pendingDelete = new Map();
 
   init();
 
@@ -114,6 +116,36 @@
       `;
 
       check.addEventListener("click", async () => {
+        const pending = pendingDelete.get(task.id);
+        if (pending) {
+          window.clearTimeout(pending.timeoutId);
+          window.clearInterval(pending.intervalId);
+          pendingDelete.delete(task.id);
+
+          check.disabled = false;
+          check.classList.remove("done");
+          text.classList.remove("done");
+          setStatus("Отменяю удаление...");
+
+          const rollbackRes = await requestWithFallback(
+            getTaskEndpoints().map((base) => `${base}/${task.id}`),
+            [
+              { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: false }) },
+              { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: false }) }
+            ]
+          );
+
+          if (!rollbackRes.success) {
+            check.classList.add("done");
+            text.classList.add("done");
+            setStatus(rollbackRes.message);
+            return;
+          }
+
+          setStatus("Удаление отменено");
+          return;
+        }
+
         check.disabled = true;
         check.classList.add("done");
         text.classList.add("done");
@@ -134,8 +166,17 @@
           return;
         }
 
-        setStatus("Задача выполнена. Удалю через 5 секунд...");
-        window.setTimeout(async () => {
+        let remaining = DELETE_DELAY_SECONDS;
+        setStatus(`Задача выполнена. Удалю через ${remaining}... Нажмите еще раз, чтобы отменить.`);
+        const intervalId = window.setInterval(() => {
+          remaining -= 1;
+          if (remaining > 0) {
+            setStatus(`Задача выполнена. Удалю через ${remaining}... Нажмите еще раз, чтобы отменить.`);
+          }
+        }, 1000);
+        const timeoutId = window.setTimeout(async () => {
+          window.clearInterval(intervalId);
+          pendingDelete.delete(task.id);
           await requestWithFallback(
             getTaskEndpoints().map((base) => `${base}/${task.id}`),
             [{ method: "DELETE" }]
@@ -146,7 +187,8 @@
           } else {
             setStatus("");
           }
-        }, 5000);
+        }, DELETE_DELAY_SECONDS * 1000);
+        pendingDelete.set(task.id, { timeoutId, intervalId });
       });
 
       item.appendChild(check);
