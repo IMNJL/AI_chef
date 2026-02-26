@@ -8,6 +8,8 @@
   const page = document.body.dataset.page || "schedule";
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
   const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
+  const WAKEUP_TIMEOUT_MS = 45000;
+  const WAKEUP_STEP_MS = 2500;
 
   const el = {
     menu: document.getElementById("menu"),
@@ -155,7 +157,8 @@
     getApiBaseUrl,
     getApiBaseCandidates,
     buildAuth,
-    getEndpointCandidates
+    getEndpointCandidates,
+    wakeUpServices
   };
 
   function getApiBaseUrl() {
@@ -287,6 +290,71 @@
       return value;
     }
     return fallback;
+  }
+
+  async function wakeUpServices(statusCallback) {
+    const startedAt = Date.now();
+    const bases = getApiBaseCandidates();
+    const extras = getSiblingServiceOrigins();
+    for (const origin of extras) {
+      fireWakePing(origin);
+    }
+
+    while (Date.now() - startedAt < WAKEUP_TIMEOUT_MS) {
+      for (const base of bases) {
+        const ok = await probeApiBase(base);
+        if (ok) {
+          statusCallback && statusCallback("Данные готовы, отображаю обновления...");
+          return true;
+        }
+      }
+      const sec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      statusCallback && statusCallback(`Подключаю сервисы и собираю ваши данные (${sec}s)...`);
+      await sleep(WAKEUP_STEP_MS);
+    }
+    return false;
+  }
+
+  async function probeApiBase(base) {
+    const auth = buildAuth();
+    const url = new URL(base + "/api/miniapp/me");
+    if (auth.telegramId) {
+      url.searchParams.set("telegramId", auth.telegramId);
+    }
+    try {
+      const response = await fetchWithTimeout(url.toString(), { headers: auth.headers }, 3500);
+      return response.ok || response.status === 401 || response.status === 403 || response.status === 400;
+    } catch {
+      return false;
+    }
+  }
+
+  function getSiblingServiceOrigins() {
+    const protocol = window.location.protocol || "https:";
+    const host = window.location.hostname || "";
+    if (!host.endsWith(".onrender.com")) return [];
+    const set = new Set();
+    if (host.includes("-frontend.")) {
+      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
+      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
+    } else if (host.includes("frontend")) {
+      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
+      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
+    }
+    return Array.from(set);
+  }
+
+  function fireWakePing(origin) {
+    if (!origin) return;
+    try {
+      fetch(origin.replace(/\/+$/, "") + "/actuator/health", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   async function fetchWithTimeout(resource, init, timeoutMs) {

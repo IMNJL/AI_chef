@@ -10,6 +10,8 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
   const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
+  const WAKEUP_TIMEOUT_MS = 45000;
+  const WAKEUP_STEP_MS = 2500;
 
   const page = document.body.dataset.page || "schedule";
 
@@ -51,7 +53,8 @@
     nowTimer: null,
     activeMeetingId: "",
     editMode: false,
-    formMode: "edit"
+    formMode: "edit",
+    wakeUpDone: false
   };
 
   init();
@@ -264,7 +267,11 @@
   }
 
   async function loadMeetingsAndRender() {
-    setScheduleStatus("Загрузка...");
+    if (!state.wakeUpDone) {
+      await warmUpBackends();
+      state.wakeUpDone = true;
+    }
+    setScheduleStatus("Подготавливаю события и синхронизирую календарь...");
     const from = toYmd(state.weekStart);
     const to = toYmd(addDays(state.weekStart, 6));
     const endpoints = getMeetingEndpoints().map((p) => `${p}?from=${from}&to=${to}`);
@@ -689,7 +696,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Календарный сервис поднимается. Данные скоро появятся.";
     return `Ошибка API (${status})`;
   }
 
@@ -810,6 +817,69 @@
     } catch {
       // ignore
     }
+  }
+
+  async function warmUpBackends() {
+    const startedAt = Date.now();
+    const bases = getApiBaseCandidates();
+    const extras = getSiblingServiceOrigins();
+    for (const origin of extras) {
+      fireWakePing(origin);
+    }
+    while (Date.now() - startedAt < WAKEUP_TIMEOUT_MS) {
+      for (const base of bases) {
+        const ok = await probeApiBase(base);
+        if (ok) {
+          setScheduleStatus("Данные готовы, отображаю события...");
+          return;
+        }
+      }
+      const sec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      setScheduleStatus(`Подключаю сервисы и собираю ваши данные (${sec}s)...`);
+      await sleep(WAKEUP_STEP_MS);
+    }
+  }
+
+  async function probeApiBase(base) {
+    const auth = buildAuth();
+    const url = new URL(base + "/api/miniapp/me");
+    if (auth.telegramId) {
+      url.searchParams.set("telegramId", auth.telegramId);
+    }
+    try {
+      const response = await fetchWithTimeout(url.toString(), { headers: auth.headers }, 3500);
+      return response.ok || response.status === 401 || response.status === 403 || response.status === 400;
+    } catch {
+      return false;
+    }
+  }
+
+  function getSiblingServiceOrigins() {
+    const protocol = window.location.protocol || "https:";
+    const host = window.location.hostname || "";
+    if (!host.endsWith(".onrender.com")) return [];
+    const set = new Set();
+    if (host.includes("-frontend.")) {
+      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
+      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
+    } else if (host.includes("frontend")) {
+      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
+      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
+    }
+    return Array.from(set);
+  }
+
+  function fireWakePing(origin) {
+    if (!origin) return;
+    try {
+      fetch(origin.replace(/\/+$/, "") + "/actuator/health", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   function setScheduleStatus(message) {

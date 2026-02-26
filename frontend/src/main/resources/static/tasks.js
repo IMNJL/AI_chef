@@ -38,7 +38,15 @@
       el.form.addEventListener("submit", onCreate);
     }
 
-    loadTasks();
+    bootAndLoadTasks();
+  }
+
+  async function bootAndLoadTasks() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.wakeUpServices === "function") {
+      await common.wakeUpServices((msg) => setStatus(msg));
+    }
+    await loadTasks();
   }
 
   async function onCreate(e) {
@@ -73,7 +81,7 @@
   }
 
   async function loadTasks() {
-    setStatus("Загрузка...");
+    setStatus("Подготавливаю задачи и синхронизирую изменения...");
     const res = await requestWithFallback(getTaskEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
       renderTasks([]);
@@ -232,7 +240,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Сервис задач поднимается. Данные скоро появятся.";
     return `Ошибка API (${status})`;
   }
 

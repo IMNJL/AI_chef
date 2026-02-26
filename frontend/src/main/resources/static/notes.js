@@ -14,7 +14,15 @@
   function init() {
     if (!el.form || !el.list) return;
     el.form.addEventListener("submit", onCreate);
-    loadNotes();
+    bootAndLoadNotes();
+  }
+
+  async function bootAndLoadNotes() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.wakeUpServices === "function") {
+      await common.wakeUpServices((msg) => setStatus(msg));
+    }
+    await loadNotes();
   }
 
   async function onCreate(e) {
@@ -43,7 +51,7 @@
   }
 
   async function loadNotes() {
-    setStatus("Загрузка...");
+    setStatus("Подготавливаю заметки и подтягиваю последние записи...");
     const res = await requestWithFallback(getNoteEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
       setStatus(res.message);
@@ -141,7 +149,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Сервис заметок прогревается. Попробуйте через несколько секунд.";
     return `Ошибка API (${status})`;
   }
 
