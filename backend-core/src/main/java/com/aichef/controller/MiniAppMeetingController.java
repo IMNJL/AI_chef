@@ -219,6 +219,53 @@ public class MiniAppMeetingController {
                     user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor(), e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
         }
+
+        if (googleOAuthService.isConnected(user)) {
+            ZoneId zone = resolveZone(user);
+            GoogleCalendarService.CreatedGoogleEvent googleEvent = null;
+            String googleEventId = meeting.getGoogleEventId();
+            if (googleEventId != null && !googleEventId.isBlank()) {
+                googleEvent = googleCalendarService.updateEvent(
+                        user,
+                        googleEventId,
+                        meeting.getTitle(),
+                        meeting.getStartsAt(),
+                        meeting.getEndsAt(),
+                        meeting.getExternalLink(),
+                        zone
+                );
+            }
+            if (googleEvent == null) {
+                googleEvent = googleCalendarService.createEvent(
+                        user,
+                        meeting.getTitle(),
+                        meeting.getStartsAt(),
+                        meeting.getEndsAt(),
+                        meeting.getExternalLink(),
+                        zone
+                );
+            }
+            if (googleEvent != null) {
+                boolean changed = false;
+                if (googleEvent.eventId() != null && !googleEvent.eventId().isBlank()
+                        && (meeting.getGoogleEventId() == null || !meeting.getGoogleEventId().equals(googleEvent.eventId()))) {
+                    meeting.setGoogleEventId(googleEvent.eventId());
+                    changed = true;
+                }
+                if (googleEvent.htmlLink() != null && !googleEvent.htmlLink().isBlank()
+                        && (meeting.getExternalLink() == null || meeting.getExternalLink().isBlank())) {
+                    meeting.setExternalLink(googleEvent.htmlLink());
+                    changed = true;
+                }
+                if (changed) {
+                    meetingRepository.save(meeting);
+                }
+            } else {
+                log.warn("MiniApp meeting update synced only in DB. Google sync failed. userId={}, telegramId={}, meetingId={}, googleEventId={}",
+                        user.getId(), user.getTelegramId(), meeting.getId(), meeting.getGoogleEventId());
+            }
+        }
+
         log.info("MiniApp meeting updated. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
                 user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
         return ResponseEntity.ok(MeetingDto.from(meeting));

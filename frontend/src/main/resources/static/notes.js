@@ -2,6 +2,9 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
 
   const el = {
+    addBtn: document.getElementById("noteAddBtn"),
+    modal: document.getElementById("noteModal"),
+    modalClose: document.getElementById("noteModalClose"),
     form: document.getElementById("noteForm"),
     title: document.getElementById("noteTitle"),
     content: document.getElementById("noteContent"),
@@ -12,8 +15,26 @@
   init();
 
   function init() {
-    if (!el.form || !el.list) return;
-    el.form.addEventListener("submit", onCreate);
+    if (!el.list) return;
+
+    if (el.addBtn) {
+      el.addBtn.addEventListener("click", openModal);
+    }
+
+    if (el.modalClose) {
+      el.modalClose.addEventListener("click", closeModal);
+    }
+
+    if (el.modal) {
+      el.modal.addEventListener("click", (e) => {
+        if (e.target === el.modal) closeModal();
+      });
+    }
+
+    if (el.form) {
+      el.form.addEventListener("submit", onCreate);
+    }
+
     bootAndLoadNotes();
   }
 
@@ -29,7 +50,7 @@
     e.preventDefault();
     const title = (el.title.value || "").trim();
     const content = (el.content.value || "").trim();
-    if (!title || !content) return;
+    if (!title) return;
 
     setStatus("Сохраняю...");
     const ok = await requestWithFallback(
@@ -46,6 +67,7 @@
     }
 
     el.form.reset();
+    closeModal();
     setStatus("Заметка создана");
     await loadNotes();
   }
@@ -75,6 +97,19 @@
       `;
       el.list.appendChild(item);
     }
+  }
+
+  function openModal() {
+    if (!el.modal) return;
+    el.modal.classList.remove("hidden");
+    if (el.title) {
+      window.setTimeout(() => el.title.focus(), 0);
+    }
+  }
+
+  function closeModal() {
+    if (!el.modal) return;
+    el.modal.classList.add("hidden");
   }
 
   async function request(path, init = {}, forcedBase = "") {

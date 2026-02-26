@@ -626,8 +626,19 @@ public class TelegramBotService {
         if (intent.action() == BotAction.CREATE_NOTE) {
             Note note = new Note();
             note.setUser(user);
-            note.setTitle(TextNormalization.normalizeRussian(intent.title() == null ? "Заметка" : intent.title()));
-            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? "" : intent.noteContent()));
+            String rawTitle = intent.title() == null ? "Заметка" : intent.title();
+            String normalizedTitle = TextNormalization.normalizeRussian(rawTitle);
+            String rawContent = intent.noteContent() == null ? "" : intent.noteContent();
+            String normalizedContent = TextNormalization.normalizeRussian(rawContent);
+
+            note.setTitle(normalizedTitle);
+            if (normalizedContent != null
+                    && !normalizedContent.isBlank()
+                    && !normalizedContent.trim().equalsIgnoreCase((normalizedTitle == null ? "" : normalizedTitle).trim())) {
+                note.setContent(normalizedContent);
+            } else {
+                note.setContent("");
+            }
             noteRepository.save(note);
             return "📝 Заметка сохранена.\nID: " + note.getId();
         }

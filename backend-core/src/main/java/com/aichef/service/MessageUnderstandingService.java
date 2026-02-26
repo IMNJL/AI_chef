@@ -243,7 +243,7 @@ public class MessageUnderstandingService {
                 null,
                 null,
                 null,
-                text,
+                null,
                 link,
                 "📝 Сохранил как заметку."
         );
