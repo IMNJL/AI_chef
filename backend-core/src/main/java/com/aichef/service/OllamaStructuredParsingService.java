@@ -65,7 +65,7 @@ public class OllamaStructuredParsingService {
                     today=%s
                     Схема:
                     {
-                      "intent":"create_meeting|create_task|other",
+                      "intent":"create_meeting|create_task|create_note|other",
                       "title":"string|null",
                       "date":"YYYY-MM-DD|null",
                       "time":"HH:mm|null",
@@ -238,6 +238,14 @@ public class OllamaStructuredParsingService {
 
         public boolean isCreateMeetingIntent() {
             return intent != null && intent.equalsIgnoreCase("create_meeting");
+        }
+
+        public boolean isCreateTaskIntent() {
+            return intent != null && intent.equalsIgnoreCase("create_task");
+        }
+
+        public boolean isCreateNoteIntent() {
+            return intent != null && intent.equalsIgnoreCase("create_note");
         }
     }
 }
