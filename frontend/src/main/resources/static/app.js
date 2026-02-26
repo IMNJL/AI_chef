@@ -2,7 +2,8 @@
   const menuItems = [
     { icon: "▦", label: "Расписание", href: "index.html", key: "schedule" },
     { icon: "✓", label: "Задачи", href: "tasks.html", key: "tasks" },
-    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" }
+    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" },
+    { icon: "◉", label: "Профиль", href: "profile.html", key: "profile" }
   ];
 
   const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -182,7 +183,8 @@
     const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
     const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromContext();
     const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
-    const username = tgUser && tgUser.username ? `@${tgUser.username}` : "";
+    const usernameRaw = tgUser && tgUser.username ? String(tgUser.username) : "";
+    const username = usernameRaw ? `@${usernameRaw}` : "";
     const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
@@ -210,10 +212,27 @@
       img.style.objectFit = "cover";
       el.userAvatar.textContent = "";
       el.userAvatar.appendChild(img);
+      attachProfileNavigation(usernameRaw);
       return;
     }
 
     el.userAvatar.textContent = userId ? String(userId).slice(-2) : "ID";
+    attachProfileNavigation(usernameRaw);
+  }
+
+  function attachProfileNavigation(usernameRaw) {
+    const card = document.querySelector(".user-card");
+    if (!card) return;
+    const profileUrl = `profile.html${window.location.search || ""}`;
+    card.classList.add("profile-link");
+    card.addEventListener("click", () => {
+      const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      if (tg && typeof tg.openTelegramLink === "function" && usernameRaw) {
+        tg.openTelegramLink(`https://t.me/${usernameRaw}`);
+        return;
+      }
+      window.location.href = profileUrl;
+    });
   }
 
   async function resolveTitlePrefix() {

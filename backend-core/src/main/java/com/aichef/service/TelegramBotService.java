@@ -640,7 +640,10 @@ public class TelegramBotService {
                 note.setContent("");
             }
             noteRepository.save(note);
-            return "📝 Заметка сохранена.\nID: " + note.getId();
+            log.info("Note created from bot. userId={}, telegramId={}, noteId={}, title={}",
+                    user.getId(), user.getTelegramId(), note.getId(), note.getTitle());
+            String preview = note.getTitle() == null || note.getTitle().isBlank() ? "Заметка" : note.getTitle();
+            return "📝 Заметка сохранена\nНазвание: " + preview;
         }
 
         if (intent.action() == BotAction.EDIT_NOTE) {
