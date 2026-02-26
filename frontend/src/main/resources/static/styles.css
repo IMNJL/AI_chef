@@ -444,15 +444,19 @@ body.sidebar-open .sidebar-backdrop {
 .task-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
   margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .task-tab {
-  border: 1px solid var(--border);
+  border: 0;
+  border-right: 1px solid var(--border);
   background: #fff;
   color: #475569;
-  border-radius: 10px;
   padding: 10px 8px;
   font: inherit;
   font-weight: 700;
@@ -460,10 +464,18 @@ body.sidebar-open .sidebar-backdrop {
   cursor: pointer;
 }
 
+.task-tab:last-child {
+  border-right: 0;
+}
+
 .task-tab.active {
   background: var(--accent-soft);
-  border-color: #c7d2fe;
   color: #1e40af;
+}
+
+.task-tab.drop-target {
+  background: #eaf1ff;
+  color: #1d4ed8;
 }
 
 .page-item {
@@ -474,6 +486,10 @@ body.sidebar-open .sidebar-backdrop {
   grid-template-columns: auto 1fr;
   gap: 10px;
   align-items: flex-start;
+}
+
+.page-item.dragging {
+  opacity: 0.55;
 }
 
 .page-item-title {

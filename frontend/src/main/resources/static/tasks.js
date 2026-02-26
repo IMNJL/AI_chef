@@ -18,7 +18,8 @@
 
   const state = {
     tasks: [],
-    activeTab: "active"
+    activeTab: "active",
+    draggingTaskId: null
   };
 
   const pendingDelete = new Map();
@@ -37,6 +38,24 @@
         const tabName = tab.dataset.tab;
         if (!tabName || tabName === state.activeTab) return;
         state.activeTab = tabName;
+        renderTasks();
+      });
+      tab.addEventListener("dragover", (e) => {
+        if (!state.draggingTaskId) return;
+        e.preventDefault();
+        tab.classList.add("drop-target");
+      });
+      tab.addEventListener("dragleave", () => {
+        tab.classList.remove("drop-target");
+      });
+      tab.addEventListener("drop", async (e) => {
+        if (!state.draggingTaskId) return;
+        e.preventDefault();
+        const tabName = tab.dataset.tab;
+        tab.classList.remove("drop-target");
+        if (!tabName) return;
+        await moveTaskToTab(state.draggingTaskId, tabName);
+        state.draggingTaskId = null;
         renderTasks();
       });
     }
@@ -68,10 +87,15 @@
     const title = (el.title.value || "").trim();
     if (!title) return;
 
+    let dueAt = toOffsetIsoFromInput(el.dueAt.value);
+    if (!dueAt) {
+      dueAt = toOffsetIso(new Date(Date.now() + 60 * 60 * 1000));
+    }
+
     const payload = {
       title,
       priority: el.priority.value || "MEDIUM",
-      dueAt: toOffsetIsoFromInput(el.dueAt.value)
+      dueAt
     };
 
     setStatus("Сохраняю...");
@@ -127,6 +151,16 @@
     for (const task of filtered) {
       const item = document.createElement("div");
       item.className = "page-item";
+      item.draggable = true;
+      item.addEventListener("dragstart", () => {
+        state.draggingTaskId = task.id;
+        item.classList.add("dragging");
+      });
+      item.addEventListener("dragend", () => {
+        state.draggingTaskId = null;
+        item.classList.remove("dragging");
+        clearDropTargets();
+      });
 
       const check = document.createElement("button");
       check.type = "button";
@@ -192,17 +226,46 @@
     startDeleteCountdown(task);
   }
 
+  async function moveTaskToTab(taskId, tabName) {
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task || taskLocks.has(taskId)) return;
+
+    if (tabName === "done") {
+      const ok = await markTaskCompleted(task, true);
+      if (ok) setStatus("Задача перемещена в done");
+      return;
+    }
+
+    if (tabName === "backlog") {
+      const ok = await patchTask(task.id, { completed: false, clearDueAt: true });
+      if (!ok.success) {
+        setStatus(ok.message);
+        return;
+      }
+      task.completed = false;
+      task.dueAt = null;
+      setStatus("Задача перемещена в backlog");
+      return;
+    }
+
+    if (tabName === "active") {
+      const nextDue = task.dueAt || toOffsetIso(new Date(Date.now() + 60 * 60 * 1000));
+      const ok = await patchTask(task.id, { completed: false, dueAt: nextDue });
+      if (!ok.success) {
+        setStatus(ok.message);
+        return;
+      }
+      task.completed = false;
+      task.dueAt = nextDue;
+      setStatus("Задача перемещена в active");
+    }
+  }
+
   async function markTaskCompleted(task, completed) {
     taskLocks.add(task.id);
     setStatus(completed ? "Отмечаю выполненной..." : "Возвращаю в работу...");
 
-    const patchRes = await requestWithFallback(
-      getTaskEndpoints().map((base) => `${base}/${task.id}`),
-      [
-        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed }) },
-        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed }) }
-      ]
-    );
+    const patchRes = await patchTask(task.id, { completed });
 
     taskLocks.delete(task.id);
     if (!patchRes.success) {
@@ -213,6 +276,16 @@
     task.completed = completed;
     renderTasks();
     return true;
+  }
+
+  async function patchTask(taskId, payload) {
+    return requestWithFallback(
+      getTaskEndpoints().map((base) => `${base}/${taskId}`),
+      [
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      ]
+    );
   }
 
   function startDeleteCountdown(task) {
@@ -282,6 +355,12 @@
       if (!tabName) continue;
       tab.classList.toggle("active", tabName === state.activeTab);
       tab.textContent = `${tabName} ${counts[tabName] || 0}`;
+    }
+  }
+
+  function clearDropTargets() {
+    for (const tab of el.tabs) {
+      tab.classList.remove("drop-target");
     }
   }
 
@@ -418,6 +497,20 @@
 
   function pad2(n) {
     return String(n).padStart(2, "0");
+  }
+
+  function toOffsetIso(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = pad2(date.getMonth() + 1);
+    const d = pad2(date.getDate());
+    const hh = pad2(date.getHours());
+    const mm = pad2(date.getMinutes());
+    const ss = pad2(date.getSeconds());
+    const off = -date.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const abs = Math.abs(off);
+    return `${y}-${m}-${d}T${hh}:${mm}:${ss}${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
   }
 
   async function fetchWithTimeout(resource, init, timeoutMs) {
