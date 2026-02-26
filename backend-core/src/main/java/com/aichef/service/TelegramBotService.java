@@ -626,10 +626,24 @@ public class TelegramBotService {
         if (intent.action() == BotAction.CREATE_NOTE) {
             Note note = new Note();
             note.setUser(user);
-            note.setTitle(TextNormalization.normalizeRussian(intent.title() == null ? "Заметка" : intent.title()));
-            note.setContent(TextNormalization.normalizeRussian(intent.noteContent() == null ? "" : intent.noteContent()));
+            String rawTitle = intent.title() == null ? "Заметка" : intent.title();
+            String normalizedTitle = TextNormalization.normalizeRussian(rawTitle);
+            String rawContent = intent.noteContent() == null ? "" : intent.noteContent();
+            String normalizedContent = TextNormalization.normalizeRussian(rawContent);
+
+            note.setTitle(normalizedTitle);
+            if (normalizedContent != null
+                    && !normalizedContent.isBlank()
+                    && !normalizedContent.trim().equalsIgnoreCase((normalizedTitle == null ? "" : normalizedTitle).trim())) {
+                note.setContent(normalizedContent);
+            } else {
+                note.setContent("");
+            }
             noteRepository.save(note);
-            return "📝 Заметка сохранена.\nID: " + note.getId();
+            log.info("Note created from bot. userId={}, telegramId={}, noteId={}, title={}",
+                    user.getId(), user.getTelegramId(), note.getId(), note.getTitle());
+            String preview = note.getTitle() == null || note.getTitle().isBlank() ? "Заметка" : note.getTitle();
+            return "📝 Заметка сохранена\nНазвание: " + preview;
         }
 
         if (intent.action() == BotAction.EDIT_NOTE) {
@@ -735,6 +749,7 @@ public class TelegramBotService {
         meeting.setStartsAt(startsAt);
         meeting.setEndsAt(endsAt);
         meeting.setExternalLink(externalLink);
+        meeting.setColor("#93c5fd");
         meeting.setStatus(MeetingStatus.CONFIRMED);
 
         GoogleCalendarService.CreatedGoogleEvent googleEvent = googleCalendarService.createEvent(

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AiCal Notes</title>
+  <title>Impera Vox Notes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -20,7 +20,7 @@
     <main class="main">
       <header class="header">
         <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
-        <h1 class="title">AiCal</h1>
+        <h1 class="title">Impera Vox</h1>
         <div class="header-user">
           <div class="user-card">
             <div class="avatar" id="userAvatar">ID</div>
@@ -33,16 +33,42 @@
       </header>
 
       <section class="page-card">
-        <div class="page-title">Заметки</div>
-        <form class="page-form" id="noteForm">
-          <input type="text" id="noteTitle" placeholder="Заголовок заметки" required />
-          <textarea id="noteContent" placeholder="Текст заметки" rows="4" required></textarea>
-          <button type="submit" class="primary-btn">Создать</button>
-        </form>
+        <div class="page-title-row">
+          <div class="page-title">Заметки</div>
+          <button class="fab-btn" id="noteAddBtn" type="button" aria-label="Добавить заметку">+</button>
+        </div>
         <div class="page-status" id="noteStatus"></div>
         <div class="page-list" id="noteList"></div>
       </section>
+      <footer class="app-footer">all rights reserved. ur impera vox</footer>
     </main>
+  </div>
+
+  <div class="modal hidden" id="noteModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title">Новая заметка</div>
+        <button type="button" class="modal-close" id="noteModalClose">✕</button>
+      </div>
+      <form class="page-form" id="noteForm">
+        <input type="text" id="noteTitle" placeholder="Заголовок заметки" required />
+        <textarea id="noteContent" placeholder="Текст заметки" rows="4"></textarea>
+        <button type="submit" class="primary-btn">Создать</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="noteViewModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title" id="noteViewTitle">Заметка</div>
+        <button type="button" class="modal-close" id="noteViewClose">✕</button>
+      </div>
+      <div class="page-item-meta" id="noteViewContent"></div>
+      <div class="note-actions">
+        <button type="button" class="note-delete-btn" id="noteDeleteBtn" aria-label="Удалить заметку">🗑</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>

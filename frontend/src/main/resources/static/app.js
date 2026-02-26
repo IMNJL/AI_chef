@@ -2,7 +2,8 @@
   const menuItems = [
     { icon: "▦", label: "Расписание", href: "index.html", key: "schedule" },
     { icon: "✓", label: "Задачи", href: "tasks.html", key: "tasks" },
-    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" }
+    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" },
+    { icon: "◉", label: "Профиль", href: "profile.html", key: "profile" }
   ];
 
   const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -10,6 +11,9 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
   const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
+  const CALENDAR_VISIBILITY_KEY = "impera_calendar_visibility";
+  const WAKEUP_TIMEOUT_MS = 45000;
+  const WAKEUP_STEP_MS = 2500;
 
   const page = document.body.dataset.page || "schedule";
 
@@ -28,6 +32,10 @@
     scheduleStatus: document.getElementById("scheduleStatus"),
     eventModal: document.getElementById("eventModal"),
     eventCloseBtn: document.getElementById("eventCloseBtn"),
+    eventMoreBtn: document.getElementById("eventMoreBtn"),
+    eventMoreMenu: document.getElementById("eventMoreMenu"),
+    eventDuplicateBtn: document.getElementById("eventDuplicateBtn"),
+    eventDeleteBtn: document.getElementById("eventDeleteBtn"),
     eventEditBtn: document.getElementById("eventEditBtn"),
     eventTitle: document.getElementById("eventTitle"),
     eventDateTime: document.getElementById("eventDateTime"),
@@ -36,7 +44,9 @@
     eventEditTitle: document.getElementById("eventEditTitle"),
     eventEditDate: document.getElementById("eventEditDate"),
     eventEditTime: document.getElementById("eventEditTime"),
-    eventEditDuration: document.getElementById("eventEditDuration")
+    eventEditDuration: document.getElementById("eventEditDuration"),
+    eventEditColor: document.getElementById("eventEditColor"),
+    eventSubmitBtn: document.getElementById("eventSubmitBtn")
   };
 
   const state = {
@@ -44,7 +54,9 @@
     meetings: [],
     nowTimer: null,
     activeMeetingId: "",
-    editMode: false
+    editMode: false,
+    formMode: "edit",
+    wakeUpDone: false
   };
 
   init();
@@ -105,10 +117,28 @@
         }
       });
     }
+    if (el.eventMoreBtn) {
+      el.eventMoreBtn.addEventListener("click", () => {
+        if (!el.eventMoreMenu) return;
+        el.eventMoreMenu.classList.toggle("hidden");
+      });
+    }
+    if (el.eventDuplicateBtn) {
+      el.eventDuplicateBtn.addEventListener("click", onDuplicateMeeting);
+    }
+    if (el.eventDeleteBtn) {
+      el.eventDeleteBtn.addEventListener("click", onDeleteMeeting);
+    }
     if (el.eventEditBtn) {
       el.eventEditBtn.addEventListener("click", () => {
         const nextMode = !state.editMode;
         setEditMode(nextMode);
+        if (nextMode && el.eventEditTitle) {
+          window.setTimeout(() => {
+            el.eventEditTitle.focus();
+            el.eventEditTitle.select();
+          }, 0);
+        }
       });
     }
     if (el.eventEditForm) {
@@ -118,6 +148,13 @@
       if (e.key === "Escape" && el.eventModal && !el.eventModal.classList.contains("hidden")) {
         closeEventModal();
       }
+    });
+    document.addEventListener("click", (e) => {
+      if (!el.eventMoreMenu || !el.eventMoreBtn) return;
+      if (el.eventMoreMenu.classList.contains("hidden")) return;
+      const target = e.target;
+      if (target instanceof Node && (el.eventMoreMenu.contains(target) || el.eventMoreBtn.contains(target))) return;
+      el.eventMoreMenu.classList.add("hidden");
     });
   }
 
@@ -147,7 +184,8 @@
     const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
     const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromContext();
     const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
-    const username = tgUser && tgUser.username ? `@${tgUser.username}` : "";
+    const usernameRaw = tgUser && tgUser.username ? String(tgUser.username) : "";
+    const username = usernameRaw ? `@${usernameRaw}` : "";
     const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
@@ -175,10 +213,27 @@
       img.style.objectFit = "cover";
       el.userAvatar.textContent = "";
       el.userAvatar.appendChild(img);
+      attachProfileNavigation(usernameRaw);
       return;
     }
 
     el.userAvatar.textContent = userId ? String(userId).slice(-2) : "ID";
+    attachProfileNavigation(usernameRaw);
+  }
+
+  function attachProfileNavigation(usernameRaw) {
+    const card = document.querySelector(".user-card");
+    if (!card) return;
+    const profileUrl = `profile.html${window.location.search || ""}`;
+    card.classList.add("profile-link");
+    card.addEventListener("click", () => {
+      const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      if (tg && typeof tg.openTelegramLink === "function" && usernameRaw) {
+        tg.openTelegramLink(`https://t.me/${usernameRaw}`);
+        return;
+      }
+      window.location.href = profileUrl;
+    });
   }
 
   async function resolveTitlePrefix() {
@@ -232,7 +287,11 @@
   }
 
   async function loadMeetingsAndRender() {
-    setScheduleStatus("Загрузка...");
+    if (!state.wakeUpDone) {
+      await warmUpBackends();
+      state.wakeUpDone = true;
+    }
+    setScheduleStatus("Подготавливаю события и синхронизирую календарь...");
     const from = toYmd(state.weekStart);
     const to = toYmd(addDays(state.weekStart, 6));
     const endpoints = getMeetingEndpoints().map((p) => `${p}?from=${from}&to=${to}`);
@@ -244,10 +303,34 @@
       return;
     }
 
-    state.meetings = Array.isArray(res.data) ? res.data : [];
+    const rawMeetings = Array.isArray(res.data) ? res.data : [];
+    state.meetings = filterMeetingsByVisibility(rawMeetings);
     renderWeekSkeleton();
     renderMeetings();
     setScheduleStatus(state.meetings.length ? "" : "Событий на неделю нет");
+  }
+
+  function filterMeetingsByVisibility(meetings) {
+    const visibility = readCalendarVisibility();
+    const internalOn = visibility.internal !== false;
+    const googleOn = visibility.google !== false;
+    const icalOn = visibility.ical !== false;
+    return meetings.filter((m) => {
+      const isGoogleLinked = !!(m && m.googleEventId);
+      if (isGoogleLinked && !googleOn) return false;
+      if (!isGoogleLinked && (!internalOn || !icalOn)) return false;
+      return true;
+    });
+  }
+
+  function readCalendarVisibility() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CALENDAR_VISIBILITY_KEY) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch {
+      return {};
+    }
   }
 
   function renderWeekSkeleton() {
@@ -348,6 +431,7 @@
         const pill = document.createElement("button");
         pill.type = "button";
         pill.className = "meeting-pill";
+        applyMeetingColor(pill, meeting.color);
         pill.style.top = `${top}px`;
         pill.style.left = `${left}px`;
         pill.style.width = `${width}px`;
@@ -366,6 +450,7 @@
     if (!meeting || !el.eventModal) return;
     state.activeMeetingId = String(meeting.id || "");
     state.editMode = false;
+    state.formMode = "edit";
     fillEventModal(meeting);
     setEventModalStatus("");
     setEditMode(false);
@@ -376,6 +461,8 @@
     if (!el.eventModal) return;
     el.eventModal.classList.add("hidden");
     state.activeMeetingId = "";
+    state.formMode = "edit";
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
     setEventModalStatus("");
   }
 
@@ -402,10 +489,14 @@
       const mins = isValidDate(startsAt) && isValidDate(endsAt) ? Math.max(5, Math.round((endsAt - startsAt) / 60000)) : 60;
       el.eventEditDuration.value = String(mins);
     }
+    if (el.eventEditColor) {
+      el.eventEditColor.value = normalizeHexColor(meeting.color) || "#93c5fd";
+    }
   }
 
   function setEditMode(enabled) {
     state.editMode = Boolean(enabled);
+    updateSubmitButtonText();
     if (el.eventEditForm) {
       el.eventEditForm.classList.toggle("hidden", !state.editMode);
     }
@@ -426,8 +517,13 @@
     const date = String(el.eventEditDate && el.eventEditDate.value ? el.eventEditDate.value : "").trim();
     const time = String(el.eventEditTime && el.eventEditTime.value ? el.eventEditTime.value : "").trim();
     const duration = Number(el.eventEditDuration && el.eventEditDuration.value ? el.eventEditDuration.value : 0);
+    const color = normalizeHexColor(el.eventEditColor && el.eventEditColor.value ? el.eventEditColor.value : "");
     if (!title || !date || !time || !Number.isFinite(duration) || duration <= 0) {
       setEventModalStatus("Проверьте название, дату, время и длительность");
+      return;
+    }
+    if (!color) {
+      setEventModalStatus("Некорректный цвет");
       return;
     }
 
@@ -440,32 +536,103 @@
     const payload = {
       title,
       startsAt: toOffsetIso(startsAt),
-      endsAt: toOffsetIso(endsAt)
+      endsAt: toOffsetIso(endsAt),
+      color
     };
 
     setEventModalStatus("Сохраняю...");
-    const res = await requestWithFallback(
-      getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
-      [{ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
-    );
+    const saveTargets = state.formMode === "duplicate"
+      ? getMeetingEndpoints()
+      : getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`);
+    const saveVariants = state.formMode === "duplicate"
+      ? [{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }]
+      : [
+          { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+        ];
+
+    const res = await requestWithFallback(saveTargets, saveVariants);
     if (!res.success) {
-      setEventModalStatus(res.message || "Ошибка сохранения");
+      const detail = res.status ? ` (HTTP ${res.status})` : "";
+      setEventModalStatus((res.message || "Ошибка сохранения, проверь доступ и формат даты/времени") + detail);
       return;
     }
 
-    setEventModalStatus("Сохранено");
+    const wasDuplicate = state.formMode === "duplicate";
+    if (wasDuplicate) {
+      setEventModalStatus("Копия создана");
+      state.formMode = "edit";
+    } else {
+      setEventModalStatus("Сохранено");
+    }
     setEditMode(false);
     await loadMeetingsAndRender();
-    const updated = state.meetings.find((m) => String(m.id) === String(activeMeeting.id));
+    const focusId = wasDuplicate
+      ? String(res.data && res.data.id ? res.data.id : activeMeeting.id)
+      : String(activeMeeting.id);
+    const updated = state.meetings.find((m) => String(m.id) === focusId);
     if (updated) {
+      state.activeMeetingId = String(updated.id || "");
       fillEventModal(updated);
     }
+  }
+
+  async function onDuplicateMeeting() {
+    const activeMeeting = state.meetings.find((m) => String(m.id) === String(state.activeMeetingId));
+    if (!activeMeeting) {
+      setEventModalStatus("Событие не найдено");
+      return;
+    }
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
+
+    state.formMode = "duplicate";
+    setEditMode(true);
+    if (el.eventEditTitle) {
+      const originalTitle = String(activeMeeting.title || "Событие").trim();
+      el.eventEditTitle.value = `Копия: ${originalTitle}`;
+      window.setTimeout(() => {
+        el.eventEditTitle.focus();
+        el.eventEditTitle.select();
+      }, 0);
+    }
+    setEventModalStatus("Режим дублирования: укажите новое название, дату и время, затем сохраните.");
+  }
+
+  async function onDeleteMeeting() {
+    const activeMeeting = state.meetings.find((m) => String(m.id) === String(state.activeMeetingId));
+    if (!activeMeeting) {
+      setEventModalStatus("Событие не найдено");
+      return;
+    }
+    if (el.eventMoreMenu) el.eventMoreMenu.classList.add("hidden");
+    const ok = window.confirm("Удалить это мероприятие?");
+    if (!ok) return;
+
+    setEventModalStatus("Удаляю...");
+    const res = await requestWithFallback(
+      getMeetingEndpoints().map((base) => `${base}/${activeMeeting.id}`),
+      [{ method: "DELETE" }]
+    );
+    if (!res.success) {
+      const detail = res.status ? ` (HTTP ${res.status})` : "";
+      setEventModalStatus((res.message || "Ошибка удаления") + detail);
+      return;
+    }
+
+    closeEventModal();
+    await loadMeetingsAndRender();
+    setScheduleStatus("Событие удалено");
   }
 
   function setEventModalStatus(message) {
     if (el.eventModalStatus) {
       el.eventModalStatus.textContent = message || "";
     }
+  }
+
+  function updateSubmitButtonText() {
+    if (!el.eventSubmitBtn) return;
+    el.eventSubmitBtn.textContent = state.formMode === "duplicate" ? "Создать копию" : "Сохранить";
   }
 
   function formatMeetingDateTimeLine(startsAt, endsAt) {
@@ -524,7 +691,10 @@
         API_REQUEST_TIMEOUT_MS
       );
       if (!response.ok) {
-        return { success: false, status: response.status, message: apiErrorMessage(response.status) };
+        const text = await response.text().catch(() => "");
+        const baseMessage = apiErrorMessage(response.status);
+        const details = text && text.length < 240 ? `: ${text}` : "";
+        return { success: false, status: response.status, message: `${baseMessage}${details}` };
       }
       if (response.status === 204) {
         return { success: true, status: response.status, data: null };
@@ -570,7 +740,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Календарный сервис поднимается. Данные скоро появятся.";
     return `Ошибка API (${status})`;
   }
 
@@ -592,13 +762,13 @@
     const host = window.location.hostname || "";
     const base = getApiBaseUrl();
     const explicitBase = readQueryApiBase() || readConfigApiBase() || readSavedApiBase();
+    const inferredRenderBase = inferRenderMiniAppApiBase();
     const list = [base];
+    if (inferredRenderBase && inferredRenderBase !== base) {
+      list.push(inferredRenderBase);
+    }
 
     if (!explicitBase) {
-      const inferredRenderBase = inferRenderMiniAppApiBase();
-      if (inferredRenderBase) {
-        list.push(inferredRenderBase);
-      }
       if (host) {
         list.push(`${protocol}//${host}:8011`);
         list.push(`${protocol}//${host}:8010`);
@@ -616,6 +786,9 @@
       const origin = window.location.origin.replace(/\/+$/, "");
       if (origin && origin !== base) {
         list.push(origin);
+      }
+      if (inferredRenderBase && inferredRenderBase !== origin) {
+        list.push(inferredRenderBase);
       }
     }
 
@@ -688,6 +861,69 @@
     } catch {
       // ignore
     }
+  }
+
+  async function warmUpBackends() {
+    const startedAt = Date.now();
+    const bases = getApiBaseCandidates();
+    const extras = getSiblingServiceOrigins();
+    for (const origin of extras) {
+      fireWakePing(origin);
+    }
+    while (Date.now() - startedAt < WAKEUP_TIMEOUT_MS) {
+      for (const base of bases) {
+        const ok = await probeApiBase(base);
+        if (ok) {
+          setScheduleStatus("Данные готовы, отображаю события...");
+          return;
+        }
+      }
+      const sec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      setScheduleStatus(`Подключаю сервисы и собираю ваши данные (${sec}s)...`);
+      await sleep(WAKEUP_STEP_MS);
+    }
+  }
+
+  async function probeApiBase(base) {
+    const auth = buildAuth();
+    const url = new URL(base + "/api/miniapp/me");
+    if (auth.telegramId) {
+      url.searchParams.set("telegramId", auth.telegramId);
+    }
+    try {
+      const response = await fetchWithTimeout(url.toString(), { headers: auth.headers }, 3500);
+      return response.ok || response.status === 401 || response.status === 403 || response.status === 400;
+    } catch {
+      return false;
+    }
+  }
+
+  function getSiblingServiceOrigins() {
+    const protocol = window.location.protocol || "https:";
+    const host = window.location.hostname || "";
+    if (!host.endsWith(".onrender.com")) return [];
+    const set = new Set();
+    if (host.includes("-frontend.")) {
+      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
+      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
+    } else if (host.includes("frontend")) {
+      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
+      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
+    }
+    return Array.from(set);
+  }
+
+  function fireWakePing(origin) {
+    if (!origin) return;
+    try {
+      fetch(origin.replace(/\/+$/, "") + "/actuator/health", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   function setScheduleStatus(message) {
@@ -780,6 +1016,30 @@
     const s = String(value || "").trim();
     if (!s) return s;
     return s[0].toUpperCase() + s.slice(1);
+  }
+
+  function normalizeHexColor(value) {
+    const v = String(value || "").trim();
+    return /^#([0-9a-fA-F]{6})$/.test(v) ? v.toLowerCase() : "";
+  }
+
+  function applyMeetingColor(element, color) {
+    if (!element) return;
+    const safe = normalizeHexColor(color) || "#93c5fd";
+    element.style.borderColor = safe;
+    element.style.backgroundColor = withAlpha(safe, 0.3);
+    element.style.color = "#1e3a8a";
+  }
+
+  function withAlpha(hex, alpha) {
+    const safe = normalizeHexColor(hex);
+    if (!safe) return "rgba(147,197,253,0.3)";
+    const raw = safe.slice(1);
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 0.3;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
   }
 
   function isValidDate(value) {

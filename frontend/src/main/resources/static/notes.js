@@ -2,26 +2,75 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
 
   const el = {
+    addBtn: document.getElementById("noteAddBtn"),
+    modal: document.getElementById("noteModal"),
+    modalClose: document.getElementById("noteModalClose"),
     form: document.getElementById("noteForm"),
     title: document.getElementById("noteTitle"),
     content: document.getElementById("noteContent"),
     list: document.getElementById("noteList"),
-    status: document.getElementById("noteStatus")
+    status: document.getElementById("noteStatus"),
+    viewModal: document.getElementById("noteViewModal"),
+    viewTitle: document.getElementById("noteViewTitle"),
+    viewContent: document.getElementById("noteViewContent"),
+    viewClose: document.getElementById("noteViewClose"),
+    deleteBtn: document.getElementById("noteDeleteBtn")
+  };
+  const state = {
+    notes: [],
+    activeNoteId: ""
   };
 
   init();
 
   function init() {
-    if (!el.form || !el.list) return;
-    el.form.addEventListener("submit", onCreate);
-    loadNotes();
+    if (!el.list) return;
+
+    if (el.addBtn) {
+      el.addBtn.addEventListener("click", openModal);
+    }
+
+    if (el.modalClose) {
+      el.modalClose.addEventListener("click", closeModal);
+    }
+
+    if (el.modal) {
+      el.modal.addEventListener("click", (e) => {
+        if (e.target === el.modal) closeModal();
+      });
+    }
+
+    if (el.form) {
+      el.form.addEventListener("submit", onCreate);
+    }
+    if (el.viewClose) {
+      el.viewClose.addEventListener("click", closeViewModal);
+    }
+    if (el.viewModal) {
+      el.viewModal.addEventListener("click", (e) => {
+        if (e.target === el.viewModal) closeViewModal();
+      });
+    }
+    if (el.deleteBtn) {
+      el.deleteBtn.addEventListener("click", onDeleteActiveNote);
+    }
+
+    bootAndLoadNotes();
+  }
+
+  async function bootAndLoadNotes() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.wakeUpServices === "function") {
+      await common.wakeUpServices((msg) => setStatus(msg));
+    }
+    await loadNotes();
   }
 
   async function onCreate(e) {
     e.preventDefault();
     const title = (el.title.value || "").trim();
     const content = (el.content.value || "").trim();
-    if (!title || !content) return;
+    if (!title) return;
 
     setStatus("Сохраняю...");
     const ok = await requestWithFallback(
@@ -38,12 +87,13 @@
     }
 
     el.form.reset();
+    closeModal();
     setStatus("Заметка создана");
     await loadNotes();
   }
 
   async function loadNotes() {
-    setStatus("Загрузка...");
+    setStatus("Подготавливаю заметки и подтягиваю последние записи...");
     const res = await requestWithFallback(getNoteEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
       setStatus(res.message);
@@ -51,22 +101,74 @@
       return;
     }
 
-    const notes = Array.isArray(res.data) ? res.data : [];
-    renderNotes(notes);
-    setStatus(notes.length ? "" : "Пока нет заметок");
+    state.notes = Array.isArray(res.data) ? res.data : [];
+    renderNotes(state.notes);
+    setStatus(state.notes.length ? "" : "Пока нет заметок");
   }
 
   function renderNotes(notes) {
     el.list.innerHTML = "";
     for (const n of notes) {
       const item = document.createElement("div");
-      item.className = "page-item";
+      item.className = "page-item note-item";
       item.innerHTML = `
         <div class="page-item-title">${escapeHtml(n.title || "(без названия)")}</div>
         <div class="page-item-meta">${escapeHtml(n.content || "")}</div>
       `;
+      item.addEventListener("click", () => openViewModal(n.id));
       el.list.appendChild(item);
     }
+  }
+
+  function openModal() {
+    if (!el.modal) return;
+    el.modal.classList.remove("hidden");
+    if (el.title) {
+      window.setTimeout(() => el.title.focus(), 0);
+    }
+  }
+
+  function closeModal() {
+    if (!el.modal) return;
+    el.modal.classList.add("hidden");
+  }
+
+  function openViewModal(noteId) {
+    const note = state.notes.find((n) => String(n.id) === String(noteId));
+    if (!note || !el.viewModal) return;
+    state.activeNoteId = String(note.id || "");
+    if (el.viewTitle) {
+      el.viewTitle.textContent = String(note.title || "Заметка");
+    }
+    if (el.viewContent) {
+      el.viewContent.textContent = String(note.content || "");
+    }
+    el.viewModal.classList.remove("hidden");
+  }
+
+  function closeViewModal() {
+    if (!el.viewModal) return;
+    el.viewModal.classList.add("hidden");
+    state.activeNoteId = "";
+  }
+
+  async function onDeleteActiveNote() {
+    const id = state.activeNoteId;
+    if (!id) return;
+    const ok = window.confirm("Удалить заметку?");
+    if (!ok) return;
+
+    setStatus("Удаляю заметку...");
+    const res = await requestWithFallback(
+      getNoteEndpoints().map((base) => `${base}/${id}`),
+      [{ method: "DELETE" }]
+    );
+    if (!res.success) {
+      setStatus(res.message);
+      return;
+    }
+    closeViewModal();
+    await loadNotes();
   }
 
   async function request(path, init = {}, forcedBase = "") {
@@ -141,7 +243,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Сервис заметок прогревается. Попробуйте через несколько секунд.";
     return `Ошибка API (${status})`;
   }
 

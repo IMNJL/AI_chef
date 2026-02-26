@@ -190,6 +190,47 @@ public class MessageUnderstandingService {
             );
         }
 
+        if (llmParsed.isCreateTaskIntent()) {
+            OffsetDateTime dueAt = inferTaskDue(normalized, zoneId);
+            String title = llmParsed.title() == null || llmParsed.title().isBlank()
+                    ? cleanupTaskTitle(text)
+                    : cleanupTaskTitle(llmParsed.title());
+            return new MessageIntent(
+                    BotAction.CREATE_TASK,
+                    FilterClassification.TASK,
+                    InboundStatus.PROCESSED,
+                    title,
+                    PriorityLevel.MEDIUM,
+                    null,
+                    null,
+                    dueAt,
+                    null,
+                    null,
+                    null,
+                    link,
+                    "✅ Задача добавлена: " + title
+            );
+        }
+
+        if (llmParsed.isCreateNoteIntent()) {
+            String noteTitle = cleanupTitle(stripTaskCommandPhrases(stripCreateCommandPhrases(text)), "Заметка");
+            return new MessageIntent(
+                    BotAction.CREATE_NOTE,
+                    FilterClassification.INFO_ONLY,
+                    InboundStatus.PROCESSED,
+                    noteTitle,
+                    PriorityLevel.LOW,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    text,
+                    link,
+                    "📝 Сохранил как заметку."
+            );
+        }
+
         if (hasMeetingHint) {
             OffsetDateTime start = inferMeetingStart(normalized, zoneId);
             OffsetDateTime end = start.plusHours(1);
@@ -213,7 +254,7 @@ public class MessageUnderstandingService {
 
         if (hasTaskHint) {
             OffsetDateTime dueAt = inferTaskDue(normalized, zoneId);
-            String title = cleanupTitle(text, "Задача");
+            String title = cleanupTaskTitle(text);
             return new MessageIntent(
                     BotAction.CREATE_TASK,
                     FilterClassification.TASK,
@@ -231,7 +272,7 @@ public class MessageUnderstandingService {
             );
         }
 
-        String noteTitle = cleanupTitle(text, "Заметка");
+        String noteTitle = cleanupTitle(stripTaskCommandPhrases(stripCreateCommandPhrases(text)), "Заметка");
         return new MessageIntent(
                 BotAction.CREATE_NOTE,
                 FilterClassification.INFO_ONLY,
@@ -243,7 +284,7 @@ public class MessageUnderstandingService {
                 null,
                 null,
                 null,
-                text,
+                null,
                 link,
                 "📝 Сохранил как заметку."
         );
@@ -526,13 +567,43 @@ public class MessageUnderstandingService {
         return cleanupTitle(title, "Встреча");
     }
 
+    private String cleanupTaskTitle(String text) {
+        String title = text == null ? "" : text;
+        title = stripTaskCommandPhrases(title);
+        title = stripCreateCommandPhrases(title);
+        title = title.replaceAll("(?iu)^\\s*(задач\\p{L}*|task)\\s*[:\\-]?\\s*", "");
+        title = title.replaceAll("(?iu)\\b(сегодня|завтра|послезавтра|today|tomorrow)\\b", " ");
+        title = title.replaceAll("(?iu)\\b(до|к)\\s+\\d{1,2}[:.]\\d{2}\\b", " ");
+        title = title.replaceAll("(?iu)\\bв\\s+\\d{1,2}[:.]\\d{2}\\b", " ");
+        title = title.replaceAll("(?iu)\\b\\d{1,2}[./]\\d{1,2}(?:[./]\\d{2,4})?\\b", " ");
+        title = title.replaceAll("\\s+", " ").trim();
+        return cleanupTitle(title, "Задача");
+    }
+
     private String stripCreateCommandPhrases(String source) {
         if (source == null) {
             return "";
         }
         String cleaned = source;
-        cleaned = cleaned.replaceAll("(?iu)\\b(созда(й|ть)|добав(ь|ить)|запланиру(й|йте|ю)|сдела(й|ть))\\s+(мне\\s+)?(событи\\p{L}*|встреч\\p{L}*)\\b", " ");
-        cleaned = cleaned.replaceAll("(?iu)\\b(созда(й|ть)|добав(ь|ить)|запланиру(й|йте|ю)|сдела(й|ть))\\b", " ");
+        cleaned = cleaned.replaceAll("(?iu)\\b(созда\\p{L}*|добав\\p{L}*|запланиру\\p{L}*|сдела\\p{L}*)\\s+(мне\\s+)?(событи\\p{L}*|встреч\\p{L}*)\\b", " ");
+        cleaned = cleaned.replaceAll("(?iu)\\b(созда\\p{L}*|добав\\p{L}*|запланиру\\p{L}*|сдела\\p{L}*)\\b", " ");
+        cleaned = cleaned.replaceAll("\\s+", " ").trim();
+        return cleaned;
+    }
+
+    private String stripTaskCommandPhrases(String source) {
+        if (source == null) {
+            return "";
+        }
+        String cleaned = source;
+        cleaned = cleaned.replaceAll(
+                "(?iu)^\\s*(?:ну\\s+)?(?:пожалуйста\\s+)?(?:созда\\p{L}*|добав\\p{L}*|сдела\\p{L}*)\\s+(?:мне\\s+)?(?:задач\\p{L}*|task)\\s*",
+                " "
+        );
+        cleaned = cleaned.replaceAll(
+                "(?iu)\\b(?:созда\\p{L}*|добав\\p{L}*|сдела\\p{L}*)\\s+(?:мне\\s+)?(?:задач\\p{L}*|task)\\b",
+                " "
+        );
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
         return cleaned;
     }
@@ -579,7 +650,10 @@ public class MessageUnderstandingService {
 
     private OffsetDateTime inferTaskDue(String normalized, ZoneId zoneId) {
         LocalDate date = inferDate(normalized, zoneId);
-        LocalTime time = hasAny(normalized, "сегодня", "today") ? LocalTime.of(20, 0) : LocalTime.of(12, 0);
+        LocalTime explicit = extractExplicitTime(normalized);
+        LocalTime time = explicit != null
+                ? explicit
+                : OffsetDateTime.now(zoneId).toLocalTime().withSecond(0).withNano(0);
         return OffsetDateTime.now(zoneId)
                 .withYear(date.getYear())
                 .withMonth(date.getMonthValue())
@@ -588,6 +662,35 @@ public class MessageUnderstandingService {
                 .withMinute(time.getMinute())
                 .withSecond(0)
                 .withNano(0);
+    }
+
+    private LocalTime extractExplicitTime(String normalized) {
+        String withoutDates = normalized.replaceAll("\\b\\d{1,2}[.]\\d{1,2}(?:[.]\\d{2,4})?\\b", " ");
+        Matcher timeMatcher = TIME_COLON_PATTERN.matcher(withoutDates);
+        while (timeMatcher.find()) {
+            int hour = Integer.parseInt(timeMatcher.group(1));
+            int minute = Integer.parseInt(timeMatcher.group(2));
+            if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+                return LocalTime.of(hour, minute);
+            }
+        }
+
+        Matcher hourMatcher = TIME_HOURS_PATTERN.matcher(withoutDates);
+        while (hourMatcher.find()) {
+            int hour = Integer.parseInt(hourMatcher.group(1));
+            if (hour >= 0 && hour <= 23) {
+                return LocalTime.of(hour, 0);
+            }
+        }
+
+        Matcher hourWordsMatcher = HOUR_WORDS_PATTERN.matcher(withoutDates);
+        while (hourWordsMatcher.find()) {
+            Integer hour = parseRussianWordsNumber(hourWordsMatcher.group(1));
+            if (hour != null && hour >= 0 && hour <= 23) {
+                return LocalTime.of(hour, 0);
+            }
+        }
+        return null;
     }
 
     private LocalDate inferDate(String normalized, ZoneId zoneId) {

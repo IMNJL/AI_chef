@@ -50,6 +50,7 @@ app:
     webhook-path: ${TELEGRAM_WEBHOOK_PATH:/api/telegram/webhook}
     api-base: ${TELEGRAM_API_BASE:https://api.telegram.org}
     public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8010}
+    use-webhook: ${TELEGRAM_USE_WEBHOOK:false}
     poll-interval-ms: ${TELEGRAM_POLL_INTERVAL_MS:3000}
     processing-threads: ${TELEGRAM_PROCESSING_THREADS:2}
     processing-queue-capacity: ${TELEGRAM_PROCESSING_QUEUE_CAPACITY:200}

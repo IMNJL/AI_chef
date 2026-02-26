@@ -166,6 +166,10 @@ body.sidebar-open .sidebar-backdrop {
   gap: 10px;
 }
 
+.user-card.profile-link {
+  cursor: pointer;
+}
+
 .avatar {
   width: 38px;
   height: 38px;
@@ -325,15 +329,19 @@ body.sidebar-open .sidebar-backdrop {
   cursor: pointer;
   font: inherit;
   overflow: hidden;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .meeting-pill-title {
-  font-size: 11px;
-  line-height: 1.1;
+  font-size: 10px;
+  line-height: 1.05;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
+  width: 100%;
 }
 
 .now-time-line {
@@ -437,6 +445,43 @@ body.sidebar-open .sidebar-backdrop {
   gap: 10px;
 }
 
+.task-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.task-tab {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: #fff;
+  color: #475569;
+  padding: 10px 8px;
+  font: inherit;
+  font-weight: 700;
+  text-transform: lowercase;
+  cursor: pointer;
+}
+
+.task-tab:last-child {
+  border-right: 0;
+}
+
+.task-tab.active {
+  background: var(--accent-soft);
+  color: #1e40af;
+}
+
+.task-tab.drop-target {
+  background: #eaf1ff;
+  color: #1d4ed8;
+}
+
 .page-item {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -447,9 +492,29 @@ body.sidebar-open .sidebar-backdrop {
   align-items: flex-start;
 }
 
+.page-item.dragging {
+  opacity: 0.55;
+}
+
+.page-item.dragging-source {
+  opacity: 0.2;
+}
+
+.task-touch-ghost {
+  position: fixed;
+  z-index: 120;
+  pointer-events: none;
+  opacity: 0.95;
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.25);
+  transform: scale(1.02);
+}
+
 .page-item-title {
   font-size: 16px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .page-item-meta {
@@ -457,6 +522,41 @@ body.sidebar-open .sidebar-backdrop {
   color: var(--muted);
   font-size: 13px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.page-item.note-item {
+  cursor: pointer;
+}
+
+.page-item.note-item .page-item-meta {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.note-delete-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #be123c;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.page-item-meta.due-urgent {
+  color: #dc2626;
+  font-weight: 600;
 }
 
 .task-check {
@@ -564,7 +664,15 @@ body.sidebar-open .sidebar-backdrop {
   border-bottom: 1px solid var(--border);
 }
 
+.event-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
 .event-close-btn,
+.event-more-btn,
 .event-edit-btn {
   width: 38px;
   height: 38px;
@@ -579,6 +687,42 @@ body.sidebar-open .sidebar-backdrop {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.event-more-menu {
+  position: absolute;
+  right: 46px;
+  top: 44px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.14);
+  overflow: hidden;
+  z-index: 3;
+}
+
+.event-more-menu.hidden {
+  display: none;
+}
+
+.event-more-menu button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: #fff;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #334155;
+}
+
+.event-more-menu button + button {
+  border-top: 1px solid var(--border);
+}
+
+.event-more-menu button.danger {
+  color: #b91c1c;
 }
 
 .event-modal-body {
@@ -632,6 +776,116 @@ body.sidebar-open .sidebar-backdrop {
   font: inherit;
 }
 
+.event-color-field input[type="color"] {
+  padding: 0;
+  width: 58px;
+  height: 40px;
+  border-radius: 8px;
+}
+
+.app-footer {
+  margin: 0 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-transform: lowercase;
+  text-align: center;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.profile-item-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.profile-item-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.profile-timezone-edit {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.profile-timezone-edit input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.profile-cal-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.profile-cal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.profile-cal-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-cal-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  border: 0;
+  cursor: pointer;
+}
+
+.toggle-switch.on {
+  background: #3b82f6;
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch.on::after {
+  transform: translateX(20px);
+}
+
 @media (max-width: 980px) {
   :root {
     --sidebar-width: 220px;
@@ -652,7 +906,7 @@ body.sidebar-open .sidebar-backdrop {
   .time-label { font-size: 12px; }
   .user-text .name { font-size: 12px; }
   .user-text .id { font-size: 11px; }
-  .meeting-pill-title { font-size: 10px; }
+  .meeting-pill-title { font-size: 9px; }
   .event-modal-title { font-size: 22px; }
   .event-modal-datetime { font-size: 15px; }
 }

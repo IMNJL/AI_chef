@@ -2,12 +2,15 @@
   const menuItems = [
     { icon: "▦", label: "Расписание", href: "index.html", key: "schedule" },
     { icon: "✓", label: "Задачи", href: "tasks.html", key: "tasks" },
-    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" }
+    { icon: "✎", label: "Заметки", href: "notes.html", key: "notes" },
+    { icon: "◉", label: "Профиль", href: "profile.html", key: "profile" }
   ];
 
   const page = document.body.dataset.page || "schedule";
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
   const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
+  const WAKEUP_TIMEOUT_MS = 45000;
+  const WAKEUP_STEP_MS = 2500;
 
   const el = {
     menu: document.getElementById("menu"),
@@ -65,7 +68,8 @@
     const tgUser = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
     const userId = tgUser && tgUser.id ? String(tgUser.id) : getTelegramIdFromContext();
     const photoUrl = tgUser && tgUser.photo_url ? String(tgUser.photo_url) : "";
-    const username = tgUser && tgUser.username ? `@${tgUser.username}` : "";
+    const usernameRaw = tgUser && tgUser.username ? String(tgUser.username) : "";
+    const username = usernameRaw ? `@${usernameRaw}` : "";
     const displayName = username || (userId ? `id${userId}` : "user");
 
     if (el.userName) {
@@ -93,10 +97,27 @@
       img.style.objectFit = "cover";
       el.userAvatar.textContent = "";
       el.userAvatar.appendChild(img);
+      attachProfileNavigation(usernameRaw);
       return;
     }
 
     el.userAvatar.textContent = userId ? String(userId).slice(-2) : "ID";
+    attachProfileNavigation(usernameRaw);
+  }
+
+  function attachProfileNavigation(usernameRaw) {
+    const card = document.querySelector(".user-card");
+    if (!card) return;
+    const profileUrl = `profile.html${window.location.search || ""}`;
+    card.classList.add("profile-link");
+    card.addEventListener("click", () => {
+      const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      if (tg && typeof tg.openTelegramLink === "function" && usernameRaw) {
+        tg.openTelegramLink(`https://t.me/${usernameRaw}`);
+        return;
+      }
+      window.location.href = profileUrl;
+    });
   }
 
   function getTelegramIdFromContext() {
@@ -155,7 +176,8 @@
     getApiBaseUrl,
     getApiBaseCandidates,
     buildAuth,
-    getEndpointCandidates
+    getEndpointCandidates,
+    wakeUpServices
   };
 
   function getApiBaseUrl() {
@@ -200,13 +222,13 @@
     const host = window.location.hostname || "";
     const base = getApiBaseUrl();
     const explicitBase = readQueryApiBase() || readConfigApiBase() || readSavedApiBase();
+    const inferredRenderBase = inferRenderMiniAppApiBase();
     const list = [base];
+    if (inferredRenderBase && inferredRenderBase !== base) {
+      list.push(inferredRenderBase);
+    }
 
     if (!explicitBase) {
-      const inferredRenderBase = inferRenderMiniAppApiBase();
-      if (inferredRenderBase) {
-        list.push(inferredRenderBase);
-      }
       if (host) {
         list.push(`${protocol}//${host}:8011`);
         list.push(`${protocol}//${host}:8010`);
@@ -224,6 +246,9 @@
       const origin = window.location.origin.replace(/\/+$/, "");
       if (origin && origin !== base) {
         list.push(origin);
+      }
+      if (inferredRenderBase && inferredRenderBase !== origin) {
+        list.push(inferredRenderBase);
       }
     }
 
@@ -284,6 +309,71 @@
       return value;
     }
     return fallback;
+  }
+
+  async function wakeUpServices(statusCallback) {
+    const startedAt = Date.now();
+    const bases = getApiBaseCandidates();
+    const extras = getSiblingServiceOrigins();
+    for (const origin of extras) {
+      fireWakePing(origin);
+    }
+
+    while (Date.now() - startedAt < WAKEUP_TIMEOUT_MS) {
+      for (const base of bases) {
+        const ok = await probeApiBase(base);
+        if (ok) {
+          statusCallback && statusCallback("Данные готовы, отображаю обновления...");
+          return true;
+        }
+      }
+      const sec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      statusCallback && statusCallback(`Подключаю сервисы и собираю ваши данные (${sec}s)...`);
+      await sleep(WAKEUP_STEP_MS);
+    }
+    return false;
+  }
+
+  async function probeApiBase(base) {
+    const auth = buildAuth();
+    const url = new URL(base + "/api/miniapp/me");
+    if (auth.telegramId) {
+      url.searchParams.set("telegramId", auth.telegramId);
+    }
+    try {
+      const response = await fetchWithTimeout(url.toString(), { headers: auth.headers }, 3500);
+      return response.ok || response.status === 401 || response.status === 403 || response.status === 400;
+    } catch {
+      return false;
+    }
+  }
+
+  function getSiblingServiceOrigins() {
+    const protocol = window.location.protocol || "https:";
+    const host = window.location.hostname || "";
+    if (!host.endsWith(".onrender.com")) return [];
+    const set = new Set();
+    if (host.includes("-frontend.")) {
+      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
+      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
+    } else if (host.includes("frontend")) {
+      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
+      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
+    }
+    return Array.from(set);
+  }
+
+  function fireWakePing(origin) {
+    if (!origin) return;
+    try {
+      fetch(origin.replace(/\/+$/, "") + "/actuator/health", { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   async function fetchWithTimeout(resource, init, timeoutMs) {
