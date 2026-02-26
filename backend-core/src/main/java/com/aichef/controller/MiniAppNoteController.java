@@ -77,6 +77,25 @@ public class MiniAppNoteController {
     public record NoteCreateRequest(String title, String content) {
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(
+            @PathVariable("id") UUID id,
+            @RequestHeader(value = "X-Telegram-Init-Data", required = false) String initData,
+            @RequestParam(value = "telegramId", required = false) Long telegramId
+    ) {
+        Optional<User> userOpt = miniAppAuthService.resolveUser(initData, telegramId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
+        }
+        Note note = noteRepository.findByIdAndUser(id, userOpt.get()).orElse(null);
+        if (note == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Note not found");
+        }
+        note.setArchived(true);
+        noteRepository.save(note);
+        return ResponseEntity.noContent().build();
+    }
+
     public record NoteDto(
             UUID id,
             String title,

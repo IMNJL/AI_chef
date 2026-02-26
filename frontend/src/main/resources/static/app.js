@@ -11,6 +11,7 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
   const PROFILE_REQUEST_TIMEOUT_MS = 1500;
   const TELEGRAM_ID_STORAGE_KEY = "aical_telegram_id";
+  const CALENDAR_VISIBILITY_KEY = "impera_calendar_visibility";
   const WAKEUP_TIMEOUT_MS = 45000;
   const WAKEUP_STEP_MS = 2500;
 
@@ -302,10 +303,34 @@
       return;
     }
 
-    state.meetings = Array.isArray(res.data) ? res.data : [];
+    const rawMeetings = Array.isArray(res.data) ? res.data : [];
+    state.meetings = filterMeetingsByVisibility(rawMeetings);
     renderWeekSkeleton();
     renderMeetings();
     setScheduleStatus(state.meetings.length ? "" : "Событий на неделю нет");
+  }
+
+  function filterMeetingsByVisibility(meetings) {
+    const visibility = readCalendarVisibility();
+    const internalOn = visibility.internal !== false;
+    const googleOn = visibility.google !== false;
+    const icalOn = visibility.ical !== false;
+    return meetings.filter((m) => {
+      const isGoogleLinked = !!(m && m.googleEventId);
+      if (isGoogleLinked && !googleOn) return false;
+      if (!isGoogleLinked && (!internalOn || !icalOn)) return false;
+      return true;
+    });
+  }
+
+  function readCalendarVisibility() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CALENDAR_VISIBILITY_KEY) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch {
+      return {};
+    }
   }
 
   function renderWeekSkeleton() {

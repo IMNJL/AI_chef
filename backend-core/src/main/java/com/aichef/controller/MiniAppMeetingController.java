@@ -317,7 +317,8 @@ public class MiniAppMeetingController {
             OffsetDateTime endsAt,
             String location,
             String externalLink,
-            String color
+            String color,
+            String googleEventId
     ) {
         public static MeetingDto from(Meeting meeting) {
             return new MeetingDto(
@@ -327,7 +328,8 @@ public class MiniAppMeetingController {
                     meeting.getEndsAt(),
                     TextNormalization.normalizeRussian(meeting.getLocation()),
                     TextNormalization.normalizeRussian(meeting.getExternalLink()),
-                    TextNormalization.normalizeRussian(meeting.getColor())
+                    TextNormalization.normalizeRussian(meeting.getColor()),
+                    TextNormalization.normalizeRussian(meeting.getGoogleEventId())
             );
         }
     }

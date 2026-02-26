@@ -2,6 +2,7 @@
   const API_REQUEST_TIMEOUT_MS = 7000;
   const DELETE_DELAY_SECONDS = 5;
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const IS_TOUCH_DEVICE = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
 
   const el = {
     addBtn: document.getElementById("taskAddBtn"),
@@ -19,7 +20,8 @@
   const state = {
     tasks: [],
     activeTab: "active",
-    draggingTaskId: null
+    draggingTaskId: null,
+    touchDrag: null
   };
 
   const pendingDelete = new Map();
@@ -151,16 +153,23 @@
     for (const task of filtered) {
       const item = document.createElement("div");
       item.className = "page-item";
-      item.draggable = true;
-      item.addEventListener("dragstart", () => {
-        state.draggingTaskId = task.id;
-        item.classList.add("dragging");
-      });
-      item.addEventListener("dragend", () => {
-        state.draggingTaskId = null;
-        item.classList.remove("dragging");
-        clearDropTargets();
-      });
+      item.draggable = !IS_TOUCH_DEVICE;
+      if (!IS_TOUCH_DEVICE) {
+        item.addEventListener("dragstart", () => {
+          state.draggingTaskId = task.id;
+          item.classList.add("dragging");
+        });
+        item.addEventListener("dragend", () => {
+          state.draggingTaskId = null;
+          item.classList.remove("dragging");
+          clearDropTargets();
+        });
+      } else {
+        item.addEventListener("touchstart", (e) => onTouchDragStart(e, task.id, item), { passive: true });
+        item.addEventListener("touchmove", onTouchDragMove, { passive: false });
+        item.addEventListener("touchend", onTouchDragEnd, { passive: false });
+        item.addEventListener("touchcancel", onTouchDragCancel, { passive: true });
+      }
 
       const check = document.createElement("button");
       check.type = "button";
@@ -362,6 +371,88 @@
     for (const tab of el.tabs) {
       tab.classList.remove("drop-target");
     }
+  }
+
+  function onTouchDragStart(e, taskId, item) {
+    if (!e.touches || e.touches.length !== 1) return;
+    const target = e.target;
+    if (target instanceof HTMLElement && target.closest(".task-check")) {
+      return;
+    }
+    const touch = e.touches[0];
+    const rect = item.getBoundingClientRect();
+    const ghost = item.cloneNode(true);
+    ghost.classList.add("task-touch-ghost");
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    document.body.appendChild(ghost);
+
+    item.classList.add("dragging-source");
+    state.touchDrag = {
+      taskId,
+      sourceEl: item,
+      ghostEl: ghost,
+      offsetX: touch.clientX - rect.left,
+      offsetY: touch.clientY - rect.top,
+      moved: false
+    };
+  }
+
+  function onTouchDragMove(e) {
+    if (!state.touchDrag || !e.touches || e.touches.length !== 1) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const drag = state.touchDrag;
+    drag.moved = true;
+    drag.ghostEl.style.left = `${touch.clientX - drag.offsetX}px`;
+    drag.ghostEl.style.top = `${touch.clientY - drag.offsetY}px`;
+
+    const tab = findTabByPoint(touch.clientX, touch.clientY);
+    clearDropTargets();
+    if (tab) {
+      tab.classList.add("drop-target");
+    }
+  }
+
+  async function onTouchDragEnd(e) {
+    if (!state.touchDrag) return;
+    e.preventDefault();
+    const changed = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
+    const drag = state.touchDrag;
+    const tab = changed ? findTabByPoint(changed.clientX, changed.clientY) : null;
+    const tabName = tab && tab.dataset ? tab.dataset.tab : "";
+
+    cleanupTouchDrag();
+
+    if (!tabName || !drag.taskId) return;
+    await moveTaskToTab(drag.taskId, tabName);
+    renderTasks();
+  }
+
+  function onTouchDragCancel() {
+    if (!state.touchDrag) return;
+    cleanupTouchDrag();
+  }
+
+  function cleanupTouchDrag() {
+    const drag = state.touchDrag;
+    if (!drag) return;
+    if (drag.ghostEl && drag.ghostEl.parentNode) {
+      drag.ghostEl.parentNode.removeChild(drag.ghostEl);
+    }
+    if (drag.sourceEl) {
+      drag.sourceEl.classList.remove("dragging-source");
+    }
+    clearDropTargets();
+    state.touchDrag = null;
+  }
+
+  function findTabByPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!(target instanceof HTMLElement)) return null;
+    return target.closest(".task-tab");
   }
 
   function isDueSoon(value) {

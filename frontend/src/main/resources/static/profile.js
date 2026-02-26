@@ -1,11 +1,18 @@
 (() => {
   const API_REQUEST_TIMEOUT_MS = 7000;
+  const CALENDAR_VISIBILITY_KEY = "impera_calendar_visibility";
 
   const el = {
     status: document.getElementById("profileStatus"),
     username: document.getElementById("profileUsername"),
     prefix: document.getElementById("profilePrefix"),
-    timezone: document.getElementById("profileTimezone")
+    timezone: document.getElementById("profileTimezone"),
+    timezoneInput: document.getElementById("timezoneInput"),
+    timezoneSaveBtn: document.getElementById("timezoneSaveBtn"),
+    calendarSwitches: document.getElementById("calendarSwitches")
+  };
+  const state = {
+    profile: null
   };
 
   init();
@@ -14,6 +21,9 @@
     const common = window.AiCalCommon;
     if (common && typeof common.wakeUpServices === "function") {
       await common.wakeUpServices((msg) => setStatus(msg));
+    }
+    if (el.timezoneSaveBtn) {
+      el.timezoneSaveBtn.addEventListener("click", saveTimezone);
     }
     await loadProfile();
   }
@@ -30,13 +40,93 @@
       const user = data.username ? `@${data.username}` : "-";
       el.username.textContent = user;
     }
+    state.profile = data;
     if (el.prefix) {
       el.prefix.textContent = data.titlePrefix || "-";
     }
     if (el.timezone) {
       el.timezone.textContent = data.timezone || "-";
     }
+    if (el.timezoneInput) {
+      el.timezoneInput.value = data.timezone || "";
+    }
+    renderCalendarSwitches(data.calendars || {});
     setStatus("");
+  }
+
+  function renderCalendarSwitches(calendars) {
+    if (!el.calendarSwitches) return;
+    const visibility = readCalendarVisibility();
+    const rows = [
+      { key: "internal", label: "Internal", sub: "Локальный календарь", connected: calendars.internal !== false },
+      { key: "google", label: "Google", sub: calendars.google ? "Подключен" : "Не подключен", connected: !!calendars.google },
+      { key: "ical", label: "iCal", sub: calendars.ical ? "Подключен" : "Не подключен", connected: !!calendars.ical }
+    ];
+    el.calendarSwitches.innerHTML = "";
+    for (const row of rows) {
+      const wrap = document.createElement("div");
+      wrap.className = "profile-cal-row";
+      const info = document.createElement("div");
+      info.innerHTML = `<div class="profile-cal-name">${row.label}</div><div class="profile-cal-sub">${row.sub}</div>`;
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = `toggle-switch${(visibility[row.key] ?? row.connected) ? " on" : ""}`;
+      toggle.disabled = !row.connected;
+      toggle.title = row.connected ? "Показать/скрыть" : "Источник не подключен";
+      toggle.addEventListener("click", () => {
+        const next = !toggle.classList.contains("on");
+        toggle.classList.toggle("on", next);
+        const current = readCalendarVisibility();
+        current[row.key] = next;
+        saveCalendarVisibility(current);
+        setStatus("Настройки отображения календарей сохранены");
+      });
+      wrap.appendChild(info);
+      wrap.appendChild(toggle);
+      el.calendarSwitches.appendChild(wrap);
+    }
+  }
+
+  async function saveTimezone() {
+    const value = String(el.timezoneInput && el.timezoneInput.value ? el.timezoneInput.value : "").trim();
+    if (!value) {
+      setStatus("Укажи часовой пояс, например Europe/Moscow");
+      return;
+    }
+    setStatus("Сохраняю часовой пояс...");
+    const res = await requestWithFallback(
+      ["/api/miniapp/me/timezone"],
+      [{ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ timezone: value }) }]
+    );
+    if (!res.success) {
+      setStatus(res.message);
+      return;
+    }
+    if (el.timezone) {
+      el.timezone.textContent = value;
+    }
+    if (state.profile) {
+      state.profile.timezone = value;
+    }
+    setStatus("Часовой пояс обновлен");
+  }
+
+  function readCalendarVisibility() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CALENDAR_VISIBILITY_KEY) || "{}");
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch {
+      return {};
+    }
+  }
+
+  function saveCalendarVisibility(data) {
+    try {
+      localStorage.setItem(CALENDAR_VISIBILITY_KEY, JSON.stringify(data || {}));
+    } catch {
+      // ignore
+    }
   }
 
   async function request(path, init = {}, forcedBase = "") {
