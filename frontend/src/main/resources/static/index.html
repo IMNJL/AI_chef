@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Chef Schedule</title>
+  <title>Impera Vox Schedule</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -20,7 +20,7 @@
     <main class="main">
       <header class="header">
         <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
-        <h1 class="title">AiCal</h1>
+        <h1 class="title">Impera Vox</h1>
         <div class="header-user">
           <div class="user-card">
             <div class="avatar" id="userAvatar">ID</div>
@@ -43,6 +43,7 @@
         <div class="week-head" id="weekHead"></div>
         <div class="week-grid" id="weekGrid"></div>
       </section>
+      <footer class="app-footer">all rights reserved. ur impera vox</footer>
     </main>
   </div>
 
@@ -50,7 +51,14 @@
     <div class="event-modal-card">
       <div class="event-modal-head">
         <button type="button" class="event-close-btn" id="eventCloseBtn" aria-label="Закрыть">✕</button>
-        <button type="button" class="event-edit-btn" id="eventEditBtn" aria-label="Редактировать">✎</button>
+        <div class="event-head-actions">
+          <button type="button" class="event-more-btn" id="eventMoreBtn" aria-label="Действия">⋯</button>
+          <div class="event-more-menu hidden" id="eventMoreMenu">
+            <button type="button" id="eventDuplicateBtn">Дублировать</button>
+            <button type="button" class="danger" id="eventDeleteBtn">Удалить</button>
+          </div>
+          <button type="button" class="event-edit-btn" id="eventEditBtn" aria-label="Редактировать">✎</button>
+        </div>
       </div>
       <div class="event-modal-body">
         <div class="event-modal-title" id="eventTitle"></div>
@@ -73,7 +81,24 @@
             <span>Длительность (мин)</span>
             <input type="number" id="eventEditDuration" min="5" max="720" step="5" required />
           </label>
-          <button type="submit" class="primary-btn">Сохранить</button>
+          <label class="event-field">
+            <span>Напомнить заранее</span>
+            <select id="eventEditReminder">
+              <option value="0">Только в момент события</option>
+              <option value="5">За 5 минут</option>
+              <option value="10">За 10 минут</option>
+              <option value="15">За 15 минут</option>
+              <option value="30" selected>За 30 минут</option>
+              <option value="60">За 1 час</option>
+              <option value="180">За 3 часа</option>
+              <option value="1440">За 1 день</option>
+            </select>
+          </label>
+          <label class="event-field event-color-field">
+            <span>Цвет мероприятия</span>
+            <input type="color" id="eventEditColor" value="#93c5fd" />
+          </label>
+          <button type="submit" class="primary-btn" id="eventSubmitBtn">Сохранить</button>
         </form>
       </div>
     </div>

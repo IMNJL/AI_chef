@@ -42,8 +42,14 @@ public class Meeting extends BaseEntity {
     @Column(name = "external_link")
     private String externalLink;
 
+    @Column(name = "color")
+    private String color;
+
     @Column(name = "google_event_id")
     private String googleEventId;
+
+    @Column(name = "reminder_minutes_before")
+    private Integer reminderMinutesBefore;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

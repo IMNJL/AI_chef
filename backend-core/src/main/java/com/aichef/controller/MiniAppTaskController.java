@@ -136,6 +136,9 @@ public class MiniAppTaskController {
         if (request.completed() != null) {
             task.setCompleted(request.completed());
         }
+        if (Boolean.TRUE.equals(request.clearDueAt())) {
+            task.setDueAt(null);
+        }
         if (request.dueAt() != null) {
             task.setDueAt(request.dueAt());
             LocalDate day = request.dueAt().atZoneSameInstant(DEFAULT_ZONE).toLocalDate();
@@ -191,7 +194,7 @@ public class MiniAppTaskController {
     public record TaskCreateRequest(String title, String priority, OffsetDateTime dueAt) {
     }
 
-    public record TaskUpdateRequest(String title, String priority, Boolean completed, OffsetDateTime dueAt) {
+    public record TaskUpdateRequest(String title, String priority, Boolean completed, OffsetDateTime dueAt, Boolean clearDueAt) {
     }
 
     public record TaskDto(

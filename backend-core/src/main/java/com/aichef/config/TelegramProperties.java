@@ -12,6 +12,7 @@ public record TelegramProperties(
         @NotBlank String webhookSecret,
         @NotBlank String webhookPath,
         @NotBlank String apiBase,
-        String publicBaseUrl
+        String publicBaseUrl,
+        boolean useWebhook
 ) {
 }

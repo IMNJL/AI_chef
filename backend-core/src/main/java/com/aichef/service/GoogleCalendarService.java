@@ -227,6 +227,113 @@ public class GoogleCalendarService {
         }
     }
 
+    public CreatedGoogleEvent updateEvent(
+            User user,
+            String eventId,
+            String title,
+            OffsetDateTime startsAt,
+            OffsetDateTime endsAt,
+            String externalLink,
+            ZoneId zoneId
+    ) {
+        if (eventId == null || eventId.isBlank()) {
+            return null;
+        }
+        String calendarId = resolveCalendarId(user);
+        String accessToken = resolveAccessToken(user);
+        if (calendarId == null || accessToken == null) {
+            log.warn(
+                    "Skip Google Calendar update: missing calendarId or accessToken. userId={}, hasCalendarId={}, hasAccessToken={}, eventId={}",
+                    user == null ? null : user.getId(),
+                    calendarId != null && !calendarId.isBlank(),
+                    accessToken != null && !accessToken.isBlank(),
+                    eventId
+            );
+            return null;
+        }
+
+        try {
+            RestClient client = RestClient.builder().baseUrl(properties.safeApiBase()).build();
+            log.info(
+                    "Google Calendar update requested. userId={}, calendarId={}, eventId={}, title={}, startsAt={}, endsAt={}, zone={}",
+                    user == null ? null : user.getId(),
+                    calendarId,
+                    eventId,
+                    title,
+                    startsAt,
+                    endsAt,
+                    zoneId == null ? null : zoneId.getId()
+            );
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("summary", title);
+            payload.put("description", externalLink);
+            payload.put("start", Map.of(
+                    "dateTime", startsAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    "timeZone", zoneId.getId()
+            ));
+            payload.put("end", Map.of(
+                    "dateTime", endsAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    "timeZone", zoneId.getId()
+            ));
+
+            Map<?, ?> response = client.patch()
+                    .uri("/calendars/{calendarId}/events/{eventId}", calendarId, eventId)
+                    .header("Authorization", "Bearer " + accessToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (response == null) {
+                log.warn(
+                        "Google Calendar update returned empty response. userId={}, calendarId={}, eventId={}",
+                        user == null ? null : user.getId(),
+                        calendarId,
+                        eventId
+                );
+                return new CreatedGoogleEvent(eventId, null);
+            }
+            Object responseEventId = response.get("id");
+            Object htmlLink = response.get("htmlLink");
+            String updatedId = responseEventId instanceof String s ? s : eventId;
+            String link = htmlLink instanceof String s ? s : null;
+            log.info(
+                    "Google Calendar update succeeded. userId={}, calendarId={}, eventId={}, htmlLink={}",
+                    user == null ? null : user.getId(),
+                    calendarId,
+                    updatedId,
+                    link
+            );
+            return new CreatedGoogleEvent(updatedId, link);
+        } catch (RestClientResponseException e) {
+            log.error(
+                    "Google Calendar update failed. status={}, userId={}, calendarId={}, eventId={}, title={}, startsAt={}, endsAt={}, body={}",
+                    e.getStatusCode(),
+                    user == null ? null : user.getId(),
+                    calendarId,
+                    eventId,
+                    title,
+                    startsAt,
+                    endsAt,
+                    e.getResponseBodyAsString()
+            );
+            return null;
+        } catch (Exception e) {
+            log.error(
+                    "Failed to update Google Calendar event. userId={}, calendarId={}, eventId={}, title={}, startsAt={}, endsAt={}, error={}",
+                    user == null ? null : user.getId(),
+                    calendarId,
+                    eventId,
+                    title,
+                    startsAt,
+                    endsAt,
+                    e.getMessage()
+            );
+            return null;
+        }
+    }
+
     public record CreatedGoogleEvent(String eventId, String htmlLink) {
     }
 

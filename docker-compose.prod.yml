@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: aichef-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aichef
+      POSTGRES_USER: aichef
+      POSTGRES_PASSWORD: aichef
+    ports:
+      - "5432:5432"
+    volumes:
+      - aichef_pg_data:/var/lib/postgresql/data
+
+  miniapp:
+    container_name: aichef-miniapp
+    build:
+      context: .
+      dockerfile: miniapp-backend/Dockerfile.render
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aichef
+      SPRING_DATASOURCE_USERNAME: aichef
+      SPRING_DATASOURCE_PASSWORD: aichef
+      MINIAPP_SERVER_PORT: 8010
+      MINIAPP_PUBLIC_URL: ${MINIAPP_PUBLIC_URL:-http://185.192.246.155:5174/}
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://185.192.246.155:8011}
+    depends_on:
+      - postgres
+    ports:
+      - "8010:8010"
+
+  telegram:
+    container_name: aichef-telegram
+    build:
+      context: .
+      dockerfile: telegram-backend/Dockerfile.render
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aichef
+      SPRING_DATASOURCE_USERNAME: aichef
+      SPRING_DATASOURCE_PASSWORD: aichef
+      TELEGRAM_SERVER_PORT: 8011
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://185.192.246.155:8011}
+      MINIAPP_PUBLIC_URL: ${MINIAPP_PUBLIC_URL:-http://185.192.246.155:5174/}
+      APP_VOSK_PYTHON: /opt/venv/bin/python
+      APP_VOSK_MODEL_PATH: /opt/models/vosk-model-small-ru-0.22
+    depends_on:
+      - postgres
+    ports:
+      - "8011:8011"
+
+  frontend:
+    container_name: aichef-frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.render
+    restart: unless-stopped
+    environment:
+      FRONTEND_PORT: 5174
+    ports:
+      - "5174:5174"
+
+volumes:
+  aichef_pg_data:

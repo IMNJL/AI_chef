@@ -1,8 +1,12 @@
 (() => {
   const API_REQUEST_TIMEOUT_MS = 7000;
+  const DELETE_DELAY_SECONDS = 5;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const IS_TOUCH_DEVICE = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
 
   const el = {
     addBtn: document.getElementById("taskAddBtn"),
+    tabs: Array.from(document.querySelectorAll(".task-tab")),
     modal: document.getElementById("taskModal"),
     modalClose: document.getElementById("taskModalClose"),
     form: document.getElementById("taskForm"),
@@ -13,32 +17,71 @@
     status: document.getElementById("taskStatus")
   };
 
+  const state = {
+    tasks: [],
+    activeTab: "active",
+    draggingTaskId: null,
+    touchDrag: null
+  };
+
+  const pendingDelete = new Map();
+  const taskLocks = new Set();
+
   init();
 
   function init() {
     if (!el.list) return;
 
     if (el.addBtn) {
-      el.addBtn.addEventListener("click", () => {
-        openModal();
+      el.addBtn.addEventListener("click", openModal);
+    }
+    for (const tab of el.tabs) {
+      tab.addEventListener("click", () => {
+        const tabName = tab.dataset.tab;
+        if (!tabName || tabName === state.activeTab) return;
+        state.activeTab = tabName;
+        renderTasks();
+      });
+      tab.addEventListener("dragover", (e) => {
+        if (!state.draggingTaskId) return;
+        e.preventDefault();
+        tab.classList.add("drop-target");
+      });
+      tab.addEventListener("dragleave", () => {
+        tab.classList.remove("drop-target");
+      });
+      tab.addEventListener("drop", async (e) => {
+        if (!state.draggingTaskId) return;
+        e.preventDefault();
+        const tabName = tab.dataset.tab;
+        tab.classList.remove("drop-target");
+        if (!tabName) return;
+        await moveTaskToTab(state.draggingTaskId, tabName);
+        state.draggingTaskId = null;
+        renderTasks();
       });
     }
-
     if (el.modalClose) {
       el.modalClose.addEventListener("click", closeModal);
     }
-
     if (el.modal) {
       el.modal.addEventListener("click", (e) => {
         if (e.target === el.modal) closeModal();
       });
     }
-
     if (el.form) {
       el.form.addEventListener("submit", onCreate);
     }
 
-    loadTasks();
+    bootAndLoadTasks();
+  }
+
+  async function bootAndLoadTasks() {
+    const common = window.AiCalCommon;
+    if (common && typeof common.wakeUpServices === "function") {
+      await common.wakeUpServices((msg) => setStatus(msg));
+    }
+    await loadTasks();
   }
 
   async function onCreate(e) {
@@ -46,10 +89,15 @@
     const title = (el.title.value || "").trim();
     if (!title) return;
 
+    let dueAt = toOffsetIsoFromInput(el.dueAt.value);
+    if (!dueAt) {
+      dueAt = toOffsetIso(new Date(Date.now() + 60 * 60 * 1000));
+    }
+
     const payload = {
       title,
       priority: el.priority.value || "MEDIUM",
-      dueAt: toOffsetIsoFromInput(el.dueAt.value)
+      dueAt
     };
 
     setStatus("Сохраняю...");
@@ -73,78 +121,346 @@
   }
 
   async function loadTasks() {
-    setStatus("Загрузка...");
+    clearPendingTimers();
+    setStatus("Подготавливаю задачи и синхронизирую изменения...");
     const res = await requestWithFallback(getTaskEndpoints(), [{ method: "GET" }]);
     if (!res.success) {
-      renderTasks([]);
+      state.tasks = [];
+      renderTasks();
       setStatus(res.message);
       return;
     }
 
-    const tasks = Array.isArray(res.data) ? res.data : [];
-    renderTasks(tasks.filter((t) => !t.completed));
-    setStatus(tasks.length ? "" : "Пока нет задач");
+    state.tasks = Array.isArray(res.data) ? res.data : [];
+    renderTasks();
+    setStatus(state.tasks.length ? "" : "Пока нет задач");
   }
 
-  function renderTasks(tasks) {
+  function renderTasks() {
+    syncTabs();
     el.list.innerHTML = "";
-    for (const task of tasks) {
+
+    const filtered = state.tasks.filter((task) => {
+      if (state.activeTab === "done") {
+        return task.completed;
+      }
+      if (state.activeTab === "backlog") {
+        return !task.completed && !task.dueAt;
+      }
+      return !task.completed && !!task.dueAt;
+    });
+
+    for (const task of filtered) {
       const item = document.createElement("div");
       item.className = "page-item";
+      item.draggable = !IS_TOUCH_DEVICE;
+      if (!IS_TOUCH_DEVICE) {
+        item.addEventListener("dragstart", () => {
+          state.draggingTaskId = task.id;
+          item.classList.add("dragging");
+        });
+        item.addEventListener("dragend", () => {
+          state.draggingTaskId = null;
+          item.classList.remove("dragging");
+          clearDropTargets();
+        });
+      } else {
+        item.addEventListener("touchstart", (e) => onTouchDragStart(e, task.id, item), { passive: true });
+        item.addEventListener("touchmove", onTouchDragMove, { passive: false });
+        item.addEventListener("touchend", onTouchDragEnd, { passive: false });
+        item.addEventListener("touchcancel", onTouchDragCancel, { passive: true });
+      }
 
       const check = document.createElement("button");
       check.type = "button";
       check.className = "task-check";
-      check.setAttribute("aria-label", "Отметить выполненной");
+      check.setAttribute("aria-label", task.completed ? "Вернуть в работу" : "Отметить выполненной");
 
       const text = document.createElement("div");
       text.className = "task-text";
-      const due = task.dueAt ? formatDateTime(task.dueAt) : "без срока";
-      text.innerHTML = `
-        <div class="page-item-title">${escapeHtml(task.title || "(без названия)")}</div>
-        <div class="page-item-meta">${escapeHtml((task.priority || "MEDIUM") + " • " + due)}</div>
-      `;
 
-      check.addEventListener("click", async () => {
-        check.disabled = true;
+      const dueLabel = task.dueAt ? formatDateTime(task.dueAt) : "без срока";
+      const meta = document.createElement("div");
+      meta.className = "page-item-meta";
+      meta.textContent = `${task.priority || "MEDIUM"} • ${dueLabel}`;
+      if (isDueSoon(task.dueAt) && !task.completed) {
+        meta.classList.add("due-urgent");
+      }
+
+      const title = document.createElement("div");
+      title.className = "page-item-title";
+      title.textContent = task.title || "(без названия)";
+
+      text.appendChild(title);
+      text.appendChild(meta);
+
+      const pending = pendingDelete.get(task.id);
+      if (task.completed) {
         check.classList.add("done");
         text.classList.add("done");
+      }
+      if (pending) {
+        check.classList.add("done");
+        text.classList.add("done");
+      }
 
-        const patchRes = await requestWithFallback(
-          getTaskEndpoints().map((base) => `${base}/${task.id}`),
-          [
-            { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: true }) },
-            { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: true }) }
-          ]
-        );
-
-        if (!patchRes.success) {
-          check.disabled = false;
-          check.classList.remove("done");
-          text.classList.remove("done");
-          setStatus(patchRes.message);
-          return;
-        }
-
-        setStatus("Задача выполнена. Удалю через 5 секунд...");
-        window.setTimeout(async () => {
-          await requestWithFallback(
-            getTaskEndpoints().map((base) => `${base}/${task.id}`),
-            [{ method: "DELETE" }]
-          );
-          item.remove();
-          if (!el.list.children.length) {
-            setStatus("Пока нет задач");
-          } else {
-            setStatus("");
-          }
-        }, 5000);
+      check.addEventListener("click", async () => {
+        await onTaskToggle(task.id);
       });
 
       item.appendChild(check);
       item.appendChild(text);
       el.list.appendChild(item);
     }
+  }
+
+  async function onTaskToggle(taskId) {
+    if (!taskId || taskLocks.has(taskId)) return;
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const pending = pendingDelete.get(taskId);
+    if (pending) {
+      await cancelPendingDelete(task);
+      return;
+    }
+    if (task.completed) {
+      await markTaskCompleted(task, false);
+      setStatus("Задача возвращена в работу");
+      return;
+    }
+
+    const ok = await markTaskCompleted(task, true);
+    if (!ok) return;
+    startDeleteCountdown(task);
+  }
+
+  async function moveTaskToTab(taskId, tabName) {
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task || taskLocks.has(taskId)) return;
+
+    if (tabName === "done") {
+      const ok = await markTaskCompleted(task, true);
+      if (ok) setStatus("Задача перемещена в done");
+      return;
+    }
+
+    if (tabName === "backlog") {
+      const ok = await patchTask(task.id, { completed: false, clearDueAt: true });
+      if (!ok.success) {
+        setStatus(ok.message);
+        return;
+      }
+      task.completed = false;
+      task.dueAt = null;
+      setStatus("Задача перемещена в backlog");
+      return;
+    }
+
+    if (tabName === "active") {
+      const nextDue = task.dueAt || toOffsetIso(new Date(Date.now() + 60 * 60 * 1000));
+      const ok = await patchTask(task.id, { completed: false, dueAt: nextDue });
+      if (!ok.success) {
+        setStatus(ok.message);
+        return;
+      }
+      task.completed = false;
+      task.dueAt = nextDue;
+      setStatus("Задача перемещена в active");
+    }
+  }
+
+  async function markTaskCompleted(task, completed) {
+    taskLocks.add(task.id);
+    setStatus(completed ? "Отмечаю выполненной..." : "Возвращаю в работу...");
+
+    const patchRes = await patchTask(task.id, { completed });
+
+    taskLocks.delete(task.id);
+    if (!patchRes.success) {
+      setStatus(patchRes.message);
+      return false;
+    }
+
+    task.completed = completed;
+    renderTasks();
+    return true;
+  }
+
+  async function patchTask(taskId, payload) {
+    return requestWithFallback(
+      getTaskEndpoints().map((base) => `${base}/${taskId}`),
+      [
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      ]
+    );
+  }
+
+  function startDeleteCountdown(task) {
+    let remaining = DELETE_DELAY_SECONDS;
+    setStatus(`Задача выполнена. Удалю через ${remaining}... Нажмите еще раз, чтобы отменить.`);
+
+    const intervalId = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) {
+        setStatus(`Задача выполнена. Удалю через ${remaining}... Нажмите еще раз, чтобы отменить.`);
+      }
+    }, 1000);
+
+    const timeoutId = window.setTimeout(async () => {
+      window.clearInterval(intervalId);
+      pendingDelete.delete(task.id);
+
+      const delRes = await requestWithFallback(
+        getTaskEndpoints().map((base) => `${base}/${task.id}`),
+        [{ method: "DELETE" }]
+      );
+
+      if (!delRes.success) {
+        setStatus(delRes.message);
+        return;
+      }
+
+      state.tasks = state.tasks.filter((t) => t.id !== task.id);
+      renderTasks();
+      setStatus(state.tasks.length ? "" : "Пока нет задач");
+    }, DELETE_DELAY_SECONDS * 1000);
+
+    pendingDelete.set(task.id, { timeoutId, intervalId });
+    renderTasks();
+  }
+
+  async function cancelPendingDelete(task) {
+    const pending = pendingDelete.get(task.id);
+    if (!pending) return;
+
+    window.clearTimeout(pending.timeoutId);
+    window.clearInterval(pending.intervalId);
+    pendingDelete.delete(task.id);
+
+    const ok = await markTaskCompleted(task, false);
+    if (!ok) return;
+    setStatus("Удаление отменено");
+  }
+
+  function clearPendingTimers() {
+    for (const pending of pendingDelete.values()) {
+      window.clearTimeout(pending.timeoutId);
+      window.clearInterval(pending.intervalId);
+    }
+    pendingDelete.clear();
+  }
+
+  function syncTabs() {
+    const counts = {
+      active: state.tasks.filter((t) => !t.completed && !!t.dueAt).length,
+      done: state.tasks.filter((t) => t.completed).length,
+      backlog: state.tasks.filter((t) => !t.completed && !t.dueAt).length
+    };
+
+    for (const tab of el.tabs) {
+      const tabName = tab.dataset.tab;
+      if (!tabName) continue;
+      tab.classList.toggle("active", tabName === state.activeTab);
+      tab.textContent = `${tabName} ${counts[tabName] || 0}`;
+    }
+  }
+
+  function clearDropTargets() {
+    for (const tab of el.tabs) {
+      tab.classList.remove("drop-target");
+    }
+  }
+
+  function onTouchDragStart(e, taskId, item) {
+    if (!e.touches || e.touches.length !== 1) return;
+    const target = e.target;
+    if (target instanceof HTMLElement && target.closest(".task-check")) {
+      return;
+    }
+    const touch = e.touches[0];
+    const rect = item.getBoundingClientRect();
+    const ghost = item.cloneNode(true);
+    ghost.classList.add("task-touch-ghost");
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    document.body.appendChild(ghost);
+
+    item.classList.add("dragging-source");
+    state.touchDrag = {
+      taskId,
+      sourceEl: item,
+      ghostEl: ghost,
+      offsetX: touch.clientX - rect.left,
+      offsetY: touch.clientY - rect.top,
+      moved: false
+    };
+  }
+
+  function onTouchDragMove(e) {
+    if (!state.touchDrag || !e.touches || e.touches.length !== 1) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const drag = state.touchDrag;
+    drag.moved = true;
+    drag.ghostEl.style.left = `${touch.clientX - drag.offsetX}px`;
+    drag.ghostEl.style.top = `${touch.clientY - drag.offsetY}px`;
+
+    const tab = findTabByPoint(touch.clientX, touch.clientY);
+    clearDropTargets();
+    if (tab) {
+      tab.classList.add("drop-target");
+    }
+  }
+
+  async function onTouchDragEnd(e) {
+    if (!state.touchDrag) return;
+    e.preventDefault();
+    const changed = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
+    const drag = state.touchDrag;
+    const tab = changed ? findTabByPoint(changed.clientX, changed.clientY) : null;
+    const tabName = tab && tab.dataset ? tab.dataset.tab : "";
+
+    cleanupTouchDrag();
+
+    if (!tabName || !drag.taskId) return;
+    await moveTaskToTab(drag.taskId, tabName);
+    renderTasks();
+  }
+
+  function onTouchDragCancel() {
+    if (!state.touchDrag) return;
+    cleanupTouchDrag();
+  }
+
+  function cleanupTouchDrag() {
+    const drag = state.touchDrag;
+    if (!drag) return;
+    if (drag.ghostEl && drag.ghostEl.parentNode) {
+      drag.ghostEl.parentNode.removeChild(drag.ghostEl);
+    }
+    if (drag.sourceEl) {
+      drag.sourceEl.classList.remove("dragging-source");
+    }
+    clearDropTargets();
+    state.touchDrag = null;
+  }
+
+  function findTabByPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!(target instanceof HTMLElement)) return null;
+    return target.closest(".task-tab");
+  }
+
+  function isDueSoon(value) {
+    if (!value) return false;
+    const due = new Date(value);
+    if (Number.isNaN(due.getTime())) return false;
+    const diff = due.getTime() - Date.now();
+    return diff > 0 && diff <= DAY_MS;
   }
 
   function openModal() {
@@ -232,7 +548,7 @@
 
   function apiErrorMessage(status) {
     if (status === 401) return "Нет доступа. Открой Mini App через Telegram";
-    if (status === 404) return "API не найден. Проверь apiBaseUrl";
+    if (status === 404) return "Сервис задач поднимается. Данные скоро появятся.";
     return `Ошибка API (${status})`;
   }
 
@@ -274,13 +590,18 @@
     return String(n).padStart(2, "0");
   }
 
-  function escapeHtml(s) {
-    return String(s)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  function toOffsetIso(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = pad2(date.getMonth() + 1);
+    const d = pad2(date.getDate());
+    const hh = pad2(date.getHours());
+    const mm = pad2(date.getMinutes());
+    const ss = pad2(date.getSeconds());
+    const off = -date.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const abs = Math.abs(off);
+    return `${y}-${m}-${d}T${hh}:${mm}:${ss}${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
   }
 
   async function fetchWithTimeout(resource, init, timeoutMs) {

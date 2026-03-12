@@ -95,6 +95,7 @@ CREATE TABLE meetings (
     ends_at TIMESTAMPTZ NOT NULL,
     location TEXT NULL,
     external_link TEXT NULL,
+    color TEXT NULL,
     google_event_id TEXT NULL,
     status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('tentative', 'confirmed', 'canceled')),
     created_at TIMESTAMP NOT NULL DEFAULT now(),

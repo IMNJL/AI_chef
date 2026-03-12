@@ -81,6 +81,8 @@ services:
         sync: false
       - key: TELEGRAM_WEBHOOK_PATH
         value: /api/telegram/webhook
+      - key: TELEGRAM_USE_WEBHOOK
+        value: "false"
       - key: TELEGRAM_API_BASE
         value: https://api.telegram.org
       - key: APP_PUBLIC_BASE_URL
