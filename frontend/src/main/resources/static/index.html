@@ -81,6 +81,19 @@
             <span>Длительность (мин)</span>
             <input type="number" id="eventEditDuration" min="5" max="720" step="5" required />
           </label>
+          <label class="event-field">
+            <span>Напомнить заранее</span>
+            <select id="eventEditReminder">
+              <option value="0">Только в момент события</option>
+              <option value="5">За 5 минут</option>
+              <option value="10">За 10 минут</option>
+              <option value="15">За 15 минут</option>
+              <option value="30" selected>За 30 минут</option>
+              <option value="60">За 1 час</option>
+              <option value="180">За 3 часа</option>
+              <option value="1440">За 1 день</option>
+            </select>
+          </label>
           <label class="event-field event-color-field">
             <span>Цвет мероприятия</span>
             <input type="color" id="eventEditColor" value="#93c5fd" />

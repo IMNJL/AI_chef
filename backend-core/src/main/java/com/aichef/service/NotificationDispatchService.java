@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -65,12 +66,17 @@ public class NotificationDispatchService {
     private String buildMessage(Notification notification) {
         if (notification.getRelatedType() == RelatedType.MEETING) {
             Meeting meeting = meetingRepository.findById(notification.getRelatedId()).orElse(null);
-            if (meeting == null) {
+            if (meeting == null || meeting.getStatus() == com.aichef.domain.enums.MeetingStatus.CANCELED) {
                 return null;
             }
             ZoneId zoneId = resolveZone(notification.getUser());
             String time = meeting.getStartsAt().atZoneSameInstant(zoneId).format(REMINDER_TIME_FMT);
-            return "⏰ Напоминание: через 30 минут событие \"" + meeting.getTitle() + "\".\n🕒 " + time;
+            long minutesBefore = Duration.between(notification.getNotifyAt(), meeting.getStartsAt()).toMinutes();
+            if (minutesBefore <= 1) {
+                return "⏰ Напоминание: событие \"" + meeting.getTitle() + "\" начинается сейчас.\n🕒 " + time;
+            }
+            return "⏰ Напоминание: событие \"" + meeting.getTitle() + "\" начнется через "
+                    + formatLeadTime(minutesBefore) + ".\n🕒 " + time;
         }
 
         if (notification.getRelatedType() == RelatedType.TASK) {
@@ -82,6 +88,18 @@ public class NotificationDispatchService {
         }
 
         return null;
+    }
+
+    private String formatLeadTime(long minutesBefore) {
+        if (minutesBefore < 60) {
+            return minutesBefore + " мин";
+        }
+        long hours = minutesBefore / 60;
+        long mins = minutesBefore % 60;
+        if (mins == 0) {
+            return hours + " ч";
+        }
+        return hours + " ч " + mins + " мин";
     }
 
     private ZoneId resolveZone(User user) {

@@ -48,6 +48,9 @@ public class Meeting extends BaseEntity {
     @Column(name = "google_event_id")
     private String googleEventId;
 
+    @Column(name = "reminder_minutes_before")
+    private Integer reminderMinutesBefore;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MeetingStatus status = MeetingStatus.CONFIRMED;

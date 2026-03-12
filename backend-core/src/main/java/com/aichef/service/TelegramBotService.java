@@ -750,6 +750,7 @@ public class TelegramBotService {
         meeting.setEndsAt(endsAt);
         meeting.setExternalLink(externalLink);
         meeting.setColor("#93c5fd");
+        meeting.setReminderMinutesBefore(30);
         meeting.setStatus(MeetingStatus.CONFIRMED);
 
         GoogleCalendarService.CreatedGoogleEvent googleEvent = googleCalendarService.createEvent(
@@ -782,8 +783,20 @@ public class TelegramBotService {
         if (user == null || meeting == null || meeting.getStartsAt() == null || meeting.getId() == null) {
             return;
         }
-        OffsetDateTime notifyAt = meeting.getStartsAt().minusMinutes(30);
-        if (notifyAt.isBefore(OffsetDateTime.now())) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime startNotifyAt = meeting.getStartsAt().isAfter(now)
+                ? meeting.getStartsAt()
+                : now.plusSeconds(5);
+        createMeetingNotification(user, meeting, startNotifyAt);
+
+        OffsetDateTime beforeNotifyAt = meeting.getStartsAt().minusMinutes(30);
+        if (beforeNotifyAt.isAfter(now) && !beforeNotifyAt.isEqual(startNotifyAt)) {
+            createMeetingNotification(user, meeting, beforeNotifyAt);
+        }
+    }
+
+    private void createMeetingNotification(User user, Meeting meeting, OffsetDateTime notifyAt) {
+        if (notifyAt == null) {
             return;
         }
         Notification notification = new Notification();

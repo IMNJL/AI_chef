@@ -222,11 +222,7 @@
     const host = window.location.hostname || "";
     const base = getApiBaseUrl();
     const explicitBase = readQueryApiBase() || readConfigApiBase() || readSavedApiBase();
-    const inferredRenderBase = inferRenderMiniAppApiBase();
     const list = [base];
-    if (inferredRenderBase && inferredRenderBase !== base) {
-      list.push(inferredRenderBase);
-    }
 
     if (!explicitBase) {
       if (host) {
@@ -246,9 +242,6 @@
       const origin = window.location.origin.replace(/\/+$/, "");
       if (origin && origin !== base) {
         list.push(origin);
-      }
-      if (inferredRenderBase && inferredRenderBase !== origin) {
-        list.push(inferredRenderBase);
       }
     }
 
@@ -275,21 +268,6 @@
     } catch {
       return "";
     }
-  }
-
-  function inferRenderMiniAppApiBase() {
-    const protocol = window.location.protocol || "https:";
-    const hostname = window.location.hostname || "";
-    if (!hostname || !hostname.endsWith(".onrender.com")) {
-      return "";
-    }
-    if (hostname.includes("-frontend.")) {
-      return `${protocol}//${hostname.replace("-frontend.", "-miniapp-api.")}`;
-    }
-    if (hostname.includes("frontend")) {
-      return `${protocol}//${hostname.replace("frontend", "miniapp-api")}`;
-    }
-    return "";
   }
 
   function saveTelegramId(value) {
@@ -349,18 +327,7 @@
   }
 
   function getSiblingServiceOrigins() {
-    const protocol = window.location.protocol || "https:";
-    const host = window.location.hostname || "";
-    if (!host.endsWith(".onrender.com")) return [];
-    const set = new Set();
-    if (host.includes("-frontend.")) {
-      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
-      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
-    } else if (host.includes("frontend")) {
-      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
-      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
-    }
-    return Array.from(set);
+    return [];
   }
 
   function fireWakePing(origin) {

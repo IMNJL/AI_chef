@@ -1,22 +1,36 @@
 package com.aichef.controller;
 
 import com.aichef.domain.enums.MeetingStatus;
+import com.aichef.domain.enums.RelatedType;
 import com.aichef.domain.model.CalendarDay;
 import com.aichef.domain.model.Meeting;
+import com.aichef.domain.model.Notification;
 import com.aichef.domain.model.User;
 import com.aichef.repository.CalendarDayRepository;
 import com.aichef.repository.MeetingRepository;
+import com.aichef.repository.NotificationRepository;
 import com.aichef.service.GoogleCalendarService;
 import com.aichef.service.GoogleOAuthService;
 import com.aichef.service.MiniAppAuthService;
 import com.aichef.util.TextNormalization;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -33,10 +47,13 @@ import java.util.regex.Pattern;
 public class MiniAppMeetingController {
     private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#([0-9a-fA-F]{6})$");
     private static final String DEFAULT_MEETING_COLOR = "#93c5fd";
+    private static final int DEFAULT_REMINDER_MINUTES_BEFORE = 30;
+    private static final int MAX_REMINDER_MINUTES_BEFORE = 7 * 24 * 60;
 
     private final MiniAppAuthService miniAppAuthService;
     private final MeetingRepository meetingRepository;
     private final CalendarDayRepository calendarDayRepository;
+    private final NotificationRepository notificationRepository;
     private final GoogleCalendarService googleCalendarService;
     private final GoogleOAuthService googleOAuthService;
 
@@ -84,10 +101,15 @@ public class MiniAppMeetingController {
         if (!request.endsAt().isAfter(request.startsAt())) {
             return ResponseEntity.badRequest().body("endsAt must be after startsAt");
         }
+        Integer reminderMinutesBefore = resolveReminderMinutes(request.reminderMinutesBefore(), null);
+        if (reminderMinutesBefore == null) {
+            return ResponseEntity.badRequest().body("Invalid reminderMinutesBefore");
+        }
         String normalizedColor = normalizeHexColor(request.color());
         if (request.color() != null && normalizedColor == null) {
             return ResponseEntity.badRequest().body("Invalid color");
         }
+
         User user = userOpt.get();
         Meeting meeting = new Meeting();
         meeting.setTitle(TextNormalization.normalizeRussian(request.title().trim()));
@@ -96,6 +118,7 @@ public class MiniAppMeetingController {
         meeting.setLocation(request.location());
         meeting.setExternalLink(request.externalLink());
         meeting.setColor(normalizedColor == null ? DEFAULT_MEETING_COLOR : normalizedColor);
+        meeting.setReminderMinutesBefore(reminderMinutesBefore);
         meeting.setStatus(MeetingStatus.CONFIRMED);
         meeting.setCalendarDay(getOrCreateDay(user, request.startsAt().toLocalDate()));
         try {
@@ -110,7 +133,6 @@ public class MiniAppMeetingController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal error");
         }
 
-        // Create Google event only for users with explicit OAuth connection.
         if (googleOAuthService.isConnected(user)) {
             GoogleCalendarService.CreatedGoogleEvent googleEvent = googleCalendarService.createEvent(
                     user,
@@ -132,8 +154,9 @@ public class MiniAppMeetingController {
             }
         }
 
-        log.info("MiniApp meeting created. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
-                user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
+        rescheduleMeetingNotifications(user, meeting);
+        log.info("MiniApp meeting created. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}, reminderMinutesBefore={}",
+                user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor(), meeting.getReminderMinutesBefore());
         return ResponseEntity.ok(MeetingDto.from(meeting));
     }
 
@@ -203,6 +226,16 @@ public class MiniAppMeetingController {
         if (request.color() != null) {
             meeting.setColor(normalizedColor);
         }
+        if (request.reminderMinutesBefore() != null) {
+            Integer reminderMinutesBefore = resolveReminderMinutes(request.reminderMinutesBefore(), meeting.getReminderMinutesBefore());
+            if (reminderMinutesBefore == null) {
+                return ResponseEntity.badRequest().body("Invalid reminderMinutesBefore");
+            }
+            meeting.setReminderMinutesBefore(reminderMinutesBefore);
+        } else if (meeting.getReminderMinutesBefore() == null) {
+            meeting.setReminderMinutesBefore(DEFAULT_REMINDER_MINUTES_BEFORE);
+        }
+
         OffsetDateTime startsAt = meeting.getStartsAt();
         OffsetDateTime endsAt = meeting.getEndsAt();
         if (startsAt == null || endsAt == null || !endsAt.isAfter(startsAt)) {
@@ -266,8 +299,9 @@ public class MiniAppMeetingController {
             }
         }
 
-        log.info("MiniApp meeting updated. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}",
-                user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor());
+        rescheduleMeetingNotifications(user, meeting);
+        log.info("MiniApp meeting updated. userId={}, telegramId={}, meetingId={}, startsAt={}, endsAt={}, color={}, reminderMinutesBefore={}",
+                user.getId(), user.getTelegramId(), meeting.getId(), meeting.getStartsAt(), meeting.getEndsAt(), meeting.getColor(), meeting.getReminderMinutesBefore());
         return ResponseEntity.ok(MeetingDto.from(meeting));
     }
 
@@ -289,6 +323,7 @@ public class MiniAppMeetingController {
         meeting.setStatus(MeetingStatus.CANCELED);
         try {
             meetingRepository.save(meeting);
+            notificationRepository.deleteByRelatedTypeAndRelatedId(RelatedType.MEETING, meeting.getId());
         } catch (Exception e) {
             log.error("MiniApp meeting delete failed. userId={}, telegramId={}, meetingId={}, error={}",
                     user.getId(), user.getTelegramId(), meeting.getId(), e.getMessage(), e);
@@ -310,6 +345,48 @@ public class MiniAppMeetingController {
                 });
     }
 
+    private void rescheduleMeetingNotifications(User user, Meeting meeting) {
+        if (user == null || meeting == null || meeting.getId() == null || meeting.getStartsAt() == null) {
+            return;
+        }
+        notificationRepository.deleteByRelatedTypeAndRelatedId(RelatedType.MEETING, meeting.getId());
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime startNotifyAt = meeting.getStartsAt().isAfter(now)
+                ? meeting.getStartsAt()
+                : now.plusSeconds(5);
+        scheduleMeetingNotification(user, meeting, startNotifyAt);
+        Integer reminderMinutesBefore = resolveReminderMinutes(meeting.getReminderMinutesBefore(), null);
+        if (reminderMinutesBefore != null && reminderMinutesBefore > 0) {
+            OffsetDateTime beforeNotifyAt = meeting.getStartsAt().minusMinutes(reminderMinutesBefore);
+            if (beforeNotifyAt.isAfter(now) && !beforeNotifyAt.isEqual(startNotifyAt)) {
+                scheduleMeetingNotification(user, meeting, beforeNotifyAt);
+            }
+        }
+    }
+
+    private void scheduleMeetingNotification(User user, Meeting meeting, OffsetDateTime notifyAt) {
+        if (notifyAt == null) {
+            return;
+        }
+        Notification notification = new Notification();
+        notification.setUser(user);
+        notification.setRelatedType(RelatedType.MEETING);
+        notification.setRelatedId(meeting.getId());
+        notification.setNotifyAt(notifyAt);
+        notification.setSent(false);
+        notificationRepository.save(notification);
+    }
+
+    private Integer resolveReminderMinutes(Integer value, Integer fallback) {
+        if (value == null) {
+            return fallback == null ? DEFAULT_REMINDER_MINUTES_BEFORE : fallback;
+        }
+        if (value < 0 || value > MAX_REMINDER_MINUTES_BEFORE) {
+            return null;
+        }
+        return value;
+    }
+
     public record MeetingDto(
             UUID id,
             String title,
@@ -318,7 +395,8 @@ public class MiniAppMeetingController {
             String location,
             String externalLink,
             String color,
-            String googleEventId
+            String googleEventId,
+            Integer reminderMinutesBefore
     ) {
         public static MeetingDto from(Meeting meeting) {
             return new MeetingDto(
@@ -329,7 +407,8 @@ public class MiniAppMeetingController {
                     TextNormalization.normalizeRussian(meeting.getLocation()),
                     TextNormalization.normalizeRussian(meeting.getExternalLink()),
                     TextNormalization.normalizeRussian(meeting.getColor()),
-                    TextNormalization.normalizeRussian(meeting.getGoogleEventId())
+                    TextNormalization.normalizeRussian(meeting.getGoogleEventId()),
+                    meeting.getReminderMinutesBefore()
             );
         }
     }
@@ -340,7 +419,8 @@ public class MiniAppMeetingController {
             OffsetDateTime endsAt,
             String location,
             String externalLink,
-            String color
+            String color,
+            Integer reminderMinutesBefore
     ) {
     }
 

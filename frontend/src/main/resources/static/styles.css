@@ -769,11 +769,13 @@ body.sidebar-open .sidebar-backdrop {
   color: #64748b;
 }
 
-.event-field input {
+.event-field input,
+.event-field select {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
   font: inherit;
+  background: #fff;
 }
 
 .event-color-field input[type="color"] {

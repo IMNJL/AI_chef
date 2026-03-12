@@ -45,6 +45,7 @@
     eventEditDate: document.getElementById("eventEditDate"),
     eventEditTime: document.getElementById("eventEditTime"),
     eventEditDuration: document.getElementById("eventEditDuration"),
+    eventEditReminder: document.getElementById("eventEditReminder"),
     eventEditColor: document.getElementById("eventEditColor"),
     eventSubmitBtn: document.getElementById("eventSubmitBtn")
   };
@@ -489,6 +490,12 @@
       const mins = isValidDate(startsAt) && isValidDate(endsAt) ? Math.max(5, Math.round((endsAt - startsAt) / 60000)) : 60;
       el.eventEditDuration.value = String(mins);
     }
+    if (el.eventEditReminder) {
+      const reminder = Number.isFinite(Number(meeting.reminderMinutesBefore))
+        ? Number(meeting.reminderMinutesBefore)
+        : 30;
+      el.eventEditReminder.value = String(Math.max(0, reminder));
+    }
     if (el.eventEditColor) {
       el.eventEditColor.value = normalizeHexColor(meeting.color) || "#93c5fd";
     }
@@ -517,9 +524,14 @@
     const date = String(el.eventEditDate && el.eventEditDate.value ? el.eventEditDate.value : "").trim();
     const time = String(el.eventEditTime && el.eventEditTime.value ? el.eventEditTime.value : "").trim();
     const duration = Number(el.eventEditDuration && el.eventEditDuration.value ? el.eventEditDuration.value : 0);
+    const reminderMinutesBefore = Number(el.eventEditReminder && el.eventEditReminder.value ? el.eventEditReminder.value : 30);
     const color = normalizeHexColor(el.eventEditColor && el.eventEditColor.value ? el.eventEditColor.value : "");
     if (!title || !date || !time || !Number.isFinite(duration) || duration <= 0) {
       setEventModalStatus("Проверьте название, дату, время и длительность");
+      return;
+    }
+    if (!Number.isFinite(reminderMinutesBefore) || reminderMinutesBefore < 0) {
+      setEventModalStatus("Некорректное значение напоминания");
       return;
     }
     if (!color) {
@@ -537,7 +549,8 @@
       title,
       startsAt: toOffsetIso(startsAt),
       endsAt: toOffsetIso(endsAt),
-      color
+      color,
+      reminderMinutesBefore
     };
 
     setEventModalStatus("Сохраняю...");
@@ -762,11 +775,7 @@
     const host = window.location.hostname || "";
     const base = getApiBaseUrl();
     const explicitBase = readQueryApiBase() || readConfigApiBase() || readSavedApiBase();
-    const inferredRenderBase = inferRenderMiniAppApiBase();
     const list = [base];
-    if (inferredRenderBase && inferredRenderBase !== base) {
-      list.push(inferredRenderBase);
-    }
 
     if (!explicitBase) {
       if (host) {
@@ -786,9 +795,6 @@
       const origin = window.location.origin.replace(/\/+$/, "");
       if (origin && origin !== base) {
         list.push(origin);
-      }
-      if (inferredRenderBase && inferredRenderBase !== origin) {
-        list.push(inferredRenderBase);
       }
     }
 
@@ -839,21 +845,6 @@
     }
   }
 
-  function inferRenderMiniAppApiBase() {
-    const protocol = window.location.protocol || "https:";
-    const hostname = window.location.hostname || "";
-    if (!hostname || !hostname.endsWith(".onrender.com")) {
-      return "";
-    }
-    if (hostname.includes("-frontend.")) {
-      return `${protocol}//${hostname.replace("-frontend.", "-miniapp-api.")}`;
-    }
-    if (hostname.includes("frontend")) {
-      return `${protocol}//${hostname.replace("frontend", "miniapp-api")}`;
-    }
-    return "";
-  }
-
   function saveTelegramId(value) {
     try {
       if (!value) return;
@@ -899,18 +890,7 @@
   }
 
   function getSiblingServiceOrigins() {
-    const protocol = window.location.protocol || "https:";
-    const host = window.location.hostname || "";
-    if (!host.endsWith(".onrender.com")) return [];
-    const set = new Set();
-    if (host.includes("-frontend.")) {
-      set.add(`${protocol}//${host.replace("-frontend.", "-miniapp-api.")}`);
-      set.add(`${protocol}//${host.replace("-frontend.", "-telegram.")}`);
-    } else if (host.includes("frontend")) {
-      set.add(`${protocol}//${host.replace("frontend", "miniapp-api")}`);
-      set.add(`${protocol}//${host.replace("frontend", "telegram")}`);
-    }
-    return Array.from(set);
+    return [];
   }
 
   function fireWakePing(origin) {
